@@ -1,0 +1,17 @@
+{
+  "files": [],
+  "references": [{ "path": "./tsconfig.app.json" }, { "path": "./tsconfig.node.json" }],
+
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"],
+      "@tarobase/js-sdk": ["@pooflabs/web"],
+      "@tarobase/js-sdk/*": ["@pooflabs/web/*"],
+      "@tarobase/server": ["@pooflabs/server"],
+      "@tarobase/server/*": ["@pooflabs/server/*"],
+      "@tarobase/core": ["@pooflabs/core"],
+      "@tarobase/core/*": ["@pooflabs/core/*"]
+    }
+  }
+}

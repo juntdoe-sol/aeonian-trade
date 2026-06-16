@@ -1,0 +1,26 @@
+{
+  "version": "1",
+  "name": "Iso-open CRYPTO CONTROL (SOL) — should SUCCEED with funded cross collateral",
+  "actors": {
+    "Trader": "FmpmAK2WJm3d1rWU7LbC3n71aotvw3GZFDaRJe8s6R1s"
+  },
+  "steps": [
+    { "op": "as", "who": "Trader" },
+    { "op": "fund", "account": "$Trader", "amount": 2.0 },
+    { "op": "fund", "account": "$Trader", "amount": 1000, "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" },
+    { "op": "set", "path": "phoenixTrader/$Trader", "data": {} },
+    { "op": "set", "path": "phoenixDeposit/dep1", "data": { "amt": 50000000 } },
+    { "op": "set", "path": "phoenixIsoTrade/sol1", "data": {
+      "trader": "$Trader",
+      "market": "71Si24E4uc3oCaPbPZTozC1ptSNNqygjjebxSmErSsC2",
+      "symbol": "SOL-PERP",
+      "side": "long",
+      "sizeBaseLots": 10,
+      "leverage": 2,
+      "subaccountIndex": 1,
+      "transferAmt": 5000000,
+      "sizeUsd": 10
+    } },
+    { "op": "expect", "expr": "get(/phoenixIsoTrade/sol1).symbol == 'SOL-PERP'" }
+  ]
+}

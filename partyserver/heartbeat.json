@@ -1,0 +1,52 @@
+{
+  "tasks": [
+    {
+      "name": "battle-resolver",
+      "cron": "* * * * *",
+      "handler": "./src/heartbeat/battle-resolver.ts",
+      "enabled": true,
+      "description": "Activate pending battles with 2 participants; resolve active battles past end time and pay out winners",
+      "schedule": {
+        "live": {
+          "cron": "* * * * *"
+        }
+      }
+    },
+    {
+      "name": "pnl-leaderboard",
+      "cron": "*/15 * * * *",
+      "handler": "./src/heartbeat/pnl-leaderboard.ts",
+      "enabled": true,
+      "description": "Recompute per-trader realized PnL aggregates (daily/weekly/monthly/all-time) and upsert pnlLeaderboard rows every 15 minutes",
+      "schedule": {
+        "live": {
+          "cron": "*/15 * * * *"
+        }
+      }
+    },
+    {
+      "name": "liquidation-detect",
+      "cron": "*/5 * * * *",
+      "handler": "./src/heartbeat/liquidation-detect.ts",
+      "enabled": true,
+      "description": "Detect Phoenix liquidations by diffing each trader's open positions against the previous snapshot (collateral-collapse discriminator + two-tick confirmation), record liquidation events, and notify followers + the trader every 5 minutes",
+      "schedule": {
+        "live": {
+          "cron": "*/5 * * * *"
+        }
+      }
+    },
+    {
+      "name": "monthly-reward-finalize",
+      "cron": "0 * * * *",
+      "handler": "./src/heartbeat/monthly-reward-finalize.ts",
+      "enabled": true,
+      "description": "On the first run after a calendar-month boundary, finalize the prior month's prize pot (idempotent): pick top-3 monthly PnL traders, snapshot the pot composition, and pre-create per-winner rank-split claim allotments. Skips if already finalized, fewer than 3 ranked traders, or an empty pot.",
+      "schedule": {
+        "live": {
+          "cron": "0 * * * *"
+        }
+      }
+    }
+  ]
+}

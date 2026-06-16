@@ -1,0 +1,25 @@
+{
+  "version": "1",
+  "name": "Isolated CLOSE attempted with NO open position - capture engine error",
+  "actors": {
+    "Trader": "GGbVrmRRdE1Gwh8xXZ8aVwSFC6e9PowyA3uF1zYrcLDb"
+  },
+  "steps": [
+    { "op": "as", "who": "Trader" },
+    { "op": "fund", "account": "$Trader", "amount": 5.0 },
+    { "op": "fund", "account": "$Trader", "amount": 1000, "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" },
+
+    { "op": "set", "path": "phoenixTrader/$Trader", "data": {} },
+    { "op": "set", "path": "phoenixDeposit/d1", "data": { "amt": 200000000 } },
+
+    { "op": "set", "path": "phoenixIsoClose/close_nopos", "data": {
+      "trader": "$Trader",
+      "market": "71Si24E4uc3oCaPbPZTozC1ptSNNqygjjebxSmErSsC2",
+      "symbol": "SOL",
+      "side": "short",
+      "sizeBaseLots": 100,
+      "subaccountIndex": 1,
+      "sizeUsd": 100
+    } }
+  ]
+}

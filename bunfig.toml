@@ -1,0 +1,12 @@
+# Bun workspace configuration for V2 template
+# This allows the root and partyserver to share dependencies efficiently
+
+[install]
+# Use workspaces to manage both frontend and backend together
+optional = true
+dev = true
+peer = true
+
+[install.cache]
+# Cache dependencies for faster installs
+dir = ".bun/cache"

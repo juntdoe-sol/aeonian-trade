@@ -1,0 +1,54 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build output
+dist/
+build/
+.vite/
+
+# Environment variables — NEVER commit real secrets
+.env
+.env.local
+.env.production
+.env.*.local
+
+# Cloudflare Workers config (contains account_id and live credentials)
+# Use wrangler.toml.template as the reference instead
+partyserver/wrangler.toml
+partyserver/dist/
+
+# AI assistant context (internal dev tool)
+CLAUDE.md
+
+# Build artifacts / generated files
+modified-files.json
+partyserver/generated/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+bun-debug.log*
+
+# Runtime
+.bun/
+
+# Test coverage
+coverage/

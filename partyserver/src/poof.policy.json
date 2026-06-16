@@ -1,0 +1,1192 @@
+{
+  "adminFiles/$fileId": {
+    "type": "storage",
+    "description": "Admin-only file storage",
+    "rules": {
+      "read": "true",
+      "create": "@user.address == @constants.ADMIN_ADDRESS",
+      "update": "false",
+      "delete": "@user.address == @constants.ADMIN_ADDRESS"
+    }
+  },
+  "appFiles/$fileId": {
+    "type": "storage",
+    "description": "App user uploaded files",
+    "rules": {
+      "read": "true",
+      "create": "@user.address != null",
+      "update": "false",
+      "delete": "@user.address == @constants.ADMIN_ADDRESS"
+    }
+  },
+  "commonQueries/$queryId": {
+    "description": "Read-only queries for wallet balances and swap quotes. Supports SOL/USDC/SPL token balance lookups, Jupiter swap quotes, and Meteora dynamic bonding curve quotes.",
+    "operationDetails": {
+      "read": "Anyone can use these queries: (1) Balance queries - check SOL, USDC, or any SPL token balance for any wallet address. (2) Jupiter swap quotes - get expected output amounts for token swaps via Jupiter aggregator. (3) Meteora swap quotes - get expected output amounts for Meteora dynamic bonding curve pools."
+    },
+    "onchain": false,
+    "fields": {},
+    "rules": {
+      "read": "true",
+      "create": "false",
+      "update": "false",
+      "delete": "false"
+    },
+    "queries": {
+      "solBalance": {
+        "description": "Get SOL balance for a wallet address in lamports (1 SOL = 1,000,000,000 lamports). Pass walletAddress as parameter.",
+        "returnType": "UInt",
+        "query": "@TokenPlugin.getBalance(@newData.walletAddress, @constants.SOL)"
+      },
+      "usdcBalance": {
+        "description": "Get USDC balance for a wallet address in base units (1 USDC = 1,000,000 base units with 6 decimals). Pass walletAddress as parameter.",
+        "returnType": "UInt",
+        "query": "@TokenPlugin.getBalance(@newData.walletAddress, @constants.USDC)"
+      },
+      "tokenBalance": {
+        "description": "Get balance for any SPL token mint for a wallet address. Pass walletAddress and tokenMint as parameters. Returns balance in the token's smallest units based on its decimals.",
+        "returnType": "UInt",
+        "query": "@TokenPlugin.getBalance(@newData.walletAddress, @newData.tokenMint)"
+      },
+      "jupiterSwapQuote": {
+        "description": "Get a Jupiter swap quote for exchanging tokens. Pass inputMint (token to sell, use @constants.SOL for native SOL), outputMint (token to buy), and amount (in smallest units like lamports). Returns the expected output amount.",
+        "returnType": "UInt",
+        "query": "@DeFiPlugin.getSwapQuote(@newData.inputMint, @newData.outputMint, @newData.amount)"
+      },
+      "meteoraSwapQuote": {
+        "description": "Get a Meteora dynamic bonding curve swap quote. Pass tokenMintAddress (the pool's base token), tokenToSwapInMintAddress (token to swap in, use @constants.SOL for native SOL), and tokenAmount (in smallest units). Returns the expected output amount.",
+        "returnType": "UInt",
+        "query": "@DeFiPlugin.getMeteoraSwapQuote(@newData.tokenMintAddress, @newData.tokenToSwapInMintAddress, @newData.tokenAmount)"
+      }
+    }
+  },
+  "phoenixTrader/$traderId": {
+    "description": "One-time trader registration on Phoenix Perps. Document existence = registered. ID should be the user's wallet address.",
+    "fields": {},
+    "onchain": true,
+    "isPassthrough": false,
+    "rules": {
+      "read": "true",
+      "create": "@user.address != null && $traderId == @user.address",
+      "update": "false",
+      "delete": "false"
+    },
+    "hooks": {
+      "onchain": {
+        "create": "@PhoenixPerpsPlugin.registerTrader(@user.address)"
+      }
+    },
+    "operationDetails": {
+      "read": "Anyone can read; document existence indicates the wallet has registered a Phoenix trader account.",
+      "create": "Authenticated users only. Caller must equal $traderId (the wallet registering). Registers a cross-margin trader account on Phoenix via @PhoenixPerpsPlugin.registerTrader. Call once per wallet before any other Phoenix action.",
+      "update": "Operation disallowed. Registration is immutable.",
+      "delete": "Operation disallowed. Registration records are permanent."
+    }
+  },
+  "phoenixDeposit/$depositId": {
+    "description": "Deposit USDC as Phoenix margin (USDC -> PhUSD -> margin). Transient onchain action — no permanent state stored.",
+    "fields": {
+      "amt": "UInt!"
+    },
+    "onchain": true,
+    "isPassthrough": true,
+    "rules": {
+      "read": "true",
+      "create": "@user.address != null",
+      "update": "false",
+      "delete": "false"
+    },
+    "hooks": {
+      "onchain": {
+        "create": "@PhoenixPerpsPlugin.emberDeposit(@user.address, @newData.amt) && @PhoenixPerpsPlugin.depositFunds(@user.address, @newData.amt)"
+      }
+    },
+    "operationDetails": {
+      "read": "Anyone can read. Passthrough — no permanent document stored.",
+      "create": "Authenticated users only. Deposits USDC as Phoenix margin for the caller. Chains emberDeposit (USDC -> PhUSD) and depositFunds (PhUSD -> margin) in one onchain operation. `amt` is in USDC smallest units (6 decimals: 1 USDC = 1,000,000). Caller signs as the source — funds are deducted from @user.address.",
+      "update": "Operation disallowed. Deposits are atomic, single-shot operations.",
+      "delete": "Operation disallowed. Passthrough action — no document to delete."
+    }
+  },
+  "phoenixWithdraw/$withdrawId": {
+    "description": "Withdraw Phoenix margin back to USDC (margin -> PhUSD -> USDC). Transient onchain action — no permanent state stored.",
+    "fields": {
+      "amt": "UInt!"
+    },
+    "onchain": true,
+    "isPassthrough": true,
+    "rules": {
+      "read": "true",
+      "create": "@user.address != null",
+      "update": "false",
+      "delete": "false"
+    },
+    "hooks": {
+      "onchain": {
+        "create": "@PhoenixPerpsPlugin.withdrawFunds(@user.address, @newData.amt) && @PhoenixPerpsPlugin.emberWithdraw(@user.address, @newData.amt)"
+      }
+    },
+    "operationDetails": {
+      "read": "Anyone can read. Passthrough — no permanent document stored.",
+      "create": "Authenticated users only. Withdraws Phoenix margin back to USDC for the caller. Chains withdrawFunds (margin -> PhUSD) and emberWithdraw (PhUSD -> USDC). Fails if open positions require the margin (all-or-nothing). `amt` is in PhUSD/USDC smallest units (6 decimals).",
+      "update": "Operation disallowed. Withdrawals are atomic, single-shot operations.",
+      "delete": "Operation disallowed. Passthrough action — no document to delete."
+    }
+  },
+  "phoenixOrder/$orderId": {
+    "description": "Place a market order (long or short) on Phoenix Perps. Onchain hook calls @PhoenixPerpsPlugin.placeLong or placeShort based on side. Document is persistent (not passthrough) so the user can view their order history. Phoenix executes at best available price — no slippage/limit/SL/TP enforcement onchain (those fields are stored for UI display only).",
+    "fields": {
+      "trader": "Address!",
+      "market": "Address!",
+      "symbol": "String!",
+      "side": "String!",
+      "sizeBaseLots": "UInt!",
+      "leverage": "UInt!",
+      "orderType": "String!",
+      "limitPrice": "UInt?",
+      "stopLoss": "UInt?",
+      "takeProfit": "UInt?",
+      "subaccountIndex": "UInt!",
+      "sizeUsd": "UInt!"
+    },
+    "onchain": true,
+    "rules": {
+      "read": "true",
+      "create": "@user.address == @newData.trader && (@newData.side == \"long\" || @newData.side == \"short\")",
+      "update": "false",
+      "delete": "false"
+    },
+    "hooks": {
+      "onchain": {
+        "create": "(@newData.side == \"long\" && @PhoenixPerpsPlugin.placeLong(@user.address, @newData.market, @newData.sizeBaseLots, @newData.subaccountIndex)) || (@newData.side == \"short\" && @PhoenixPerpsPlugin.placeShort(@user.address, @newData.market, @newData.sizeBaseLots, @newData.subaccountIndex))"
+      },
+      "offchain": {
+        "create": "((get(/userPoints/@newData.trader) != null && @DocumentPlugin.updateField(/userPoints/@newData.trader, 'tradingPoints', get(/userPoints/@newData.trader).tradingPoints + @newData.sizeUsd) && @DocumentPlugin.updateField(/userPoints/@newData.trader, 'totalPoints', get(/userPoints/@newData.trader).totalPoints + @newData.sizeUsd) && @DocumentPlugin.updateField(/userPoints/@newData.trader, 'updatedAt', @time.now)) || (get(/userPoints/@newData.trader) == null && @DocumentPlugin.putDocument(/userPoints/@newData.trader, { address: @newData.trader, totalPoints: @newData.sizeUsd, tradingPoints: @newData.sizeUsd, battlePoints: 0, socialPoints: 0, updatedAt: @time.now }))) && @DocumentPlugin.putDocument(/pointsActivity/@time.now, { userAddress: @newData.trader, activityType: \"trade\", points: @newData.sizeUsd, description: \"Phoenix trade placed\", createdAt: @time.now })"
+      }
+    },
+    "operationDetails": {
+      "read": "Anyone can read (onchain data is public). UI typically filters by @data.trader == current wallet to show only that user's order history.",
+      "create": "Authenticated users only. Caller wallet (@user.address) must equal @newData.trader. Side must be exactly 'long' or 'short'. The market pubkey is NOT enumerated against a per-market whitelist — any live Phoenix market is accepted so newly-listed markets work without policy edits. This is safe because the onchain hook uses @newData.market ONLY as the orderbook account passed into @PhoenixPerpsPlugin.placeLong/placeShort; the Phoenix on-chain program validates that account, so a non-Phoenix-market pubkey simply reverts the user's own transaction (no fund diversion possible — no transfer leg consumes @newData.market). On create the onchain hook calls placeLong (if side=='long') or placeShort with subaccountIndex (0 = cross margin, >0 = isolated margin). Phoenix executes at best available price. Caller must have already registered a Phoenix trader account and deposited margin. sizeBaseLots is in market-specific base lots. sizeUsd is the notional USD value used to award trading points ($1 = 1 point).",
+      "update": "Operation disallowed. Orders are immutable once placed — to change a position use closePosition or place a new order.",
+      "delete": "Operation disallowed. Orders form a permanent history record."
+    }
+  },
+  "battles/$battleId": {
+    "description": "Trading battle metadata + state. Head-to-head Phoenix perps PnL competition. Offchain state collection; token escrow happens in battleParticipants (onchain). Backend (PROJECT_VAULT_ADDRESS) marks active/ended and sets winner after evaluating Phoenix PnL via @PhoenixPerpsPlugin.getUnrealizedPnl.",
+    "fields": {
+      "challenger": "Address!",
+      "opponent": "Address?",
+      "betAmountMicro": "UInt!",
+      "startTime": "UInt",
+      "endTime": "UInt",
+      "durationSeconds": "UInt!",
+      "status": "String",
+      "challengerXHandle": "String?",
+      "opponentXHandle": "String?",
+      "winner": "Address?",
+      "createdAt": "UInt!",
+      "type": "String?",
+      "minParticipants": "UInt?",
+      "maxParticipants": "UInt?",
+      "title": "String?"
+    },
+    "onchain": false,
+    "rules": {
+      "read": "true",
+      "create": "@user.address != null && @newData.betAmountMicro > 0 && @newData.status == \"pending\" && ((@newData.type == \"headtohead\" && @user.address == @newData.challenger) || (@newData.type == \"royalrumble\" && @user.address == @constants.ADMIN_ADDRESS))",
+      "update": "@user.address == @constants.PROJECT_VAULT_ADDRESS || (@user.address == @data.challenger && @data.status == \"pending\" && @newData.status == \"cancelled\")",
+      "delete": "@user.address == @constants.ADMIN_ADDRESS"
+    },
+    "operationDetails": {
+      "read": "Public — anyone can read all battle records for browsing open challenges, watching battles, etc.",
+      "create": "Authenticated users only. Caller must equal @newData.challenger (challenger creates the battle for themselves). betAmountMicro must be > 0 (micro-USDC, 6 decimals). Status must start as 'pending'. opponent is null for open challenges (anyone can accept) or set to a specific wallet for direct challenges. startTime/endTime are set later by the backend when the battle becomes active. No token transfer occurs here — actual USDC escrow happens when each player joins via battleParticipants.",
+      "update": "Two paths: (1) PROJECT_VAULT_ADDRESS (backend) can update any field — used to mark 'pending'→'active' once both participants joined (sets startTime/endTime), 'active'→'ended' after endTime, set 'winner' after evaluating Phoenix PnL, and mark 'ended'→'claimed' after winner claims. (2) The original challenger can update a pending battle to status='cancelled' only if no opponent has joined yet (used to cancel an open challenge they posted).",
+      "delete": "Admin only. The admin wallet (@constants.ADMIN_ADDRESS, the project owner) can delete/remove any battle record regardless of status (pending, active, ended, cancelled, or claimed — including inactive ones). Used for cleanup/moderation of battle history."
+    }
+  },
+  "battleParticipants/$participantId": {
+    "description": "Per-trader join record + USDC escrow into the battle's PDA vault. ONCHAIN — onchain hook locks the bet in a PDA derived from battleId. Frontend builds $participantId as '{battleId}_{wallet}' (use underscores, not hyphens; account IDs allow alphanumeric + underscore/hyphen). Frontend passes equityAtStartMicro by querying perp-api.phoenix.trade for the wallet's current Phoenix equity at the moment of joining — used as the baseline to compute % PnL when the battle ends.",
+    "fields": {
+      "battleId": "String!",
+      "wallet": "Address!",
+      "xHandle": "String?",
+      "betAmountMicro": "UInt!",
+      "equityAtStartMicro": "UInt!",
+      "joinedAt": "UInt!"
+    },
+    "onchain": true,
+    "rules": {
+      "read": "true",
+      "create": "@user.address != null && @user.address == @newData.wallet && @newData.betAmountMicro > 0",
+      "update": "false",
+      "delete": "@user.address == @constants.ADMIN_ADDRESS"
+    },
+    "hooks": {
+      "onchain": {
+        "create": "@AccountPlugin.createAccount(@newData.battleId) && @TokenPlugin.transfer(@user.address, @newData.battleId, @constants.USDC, @newData.betAmountMicro)"
+      }
+    },
+    "operationDetails": {
+      "read": "Public (onchain). Anyone can read participant records. UI typically filters by battleId to show both participants of a given battle.",
+      "create": "Authenticated users only. Caller must equal @newData.wallet (each participant deposits for themselves). betAmountMicro must be > 0 (micro-USDC, 6 decimals). Onchain hook: (1) @AccountPlugin.createAccount(@newData.battleId) — derives/creates a Program-Derived Address (PDA) keyed by battleId; idempotent so the second participant doesn't fail. (2) @TokenPlugin.transfer moves betAmountMicro USDC from the caller's wallet into the battle's PDA vault. NOTE: betAmountMicro is stored as a field rather than read from the offchain battles collection because onchain hooks cannot read offchain data. The backend is expected to validate (off-policy) that both participants' betAmountMicro match the battle's betAmountMicro before marking the battle 'active'. equityAtStartMicro is the trader's Phoenix equity (6 decimals) at the moment of joining, used as the baseline to compute % PnL at battle end.",
+      "update": "Operation disallowed. Participation records are immutable — the deposit is locked until claim or refund.",
+      "delete": "Admin-only (cascade cleanup). Only @constants.ADMIN_ADDRESS can delete, used to clean up the offchain tracking record when an admin deletes a battle. IMPORTANT: deletion does NOT run any onchain hook and does NOT return or move escrowed USDC — funds remain locked in the battle's PDA vault. Admins only delete these for already-settled/refunded or test battles."
+    }
+  },
+  "battleClaims/$claimId": {
+    "description": "Winner claims the prize pot. ONCHAIN — onchain hook splits the total pot (2 * betAmountMicro USDC) between the winner (98%) and the platform/admin (2% fee). $claimId should be the battleId (one claim per battle, prevents double-claim via document uniqueness). NOTE: Because the rule cannot cross-read the offchain battles collection from an onchain rule, claim authorization is gated to PROJECT_VAULT_ADDRESS — the backend verifies the winner (via Phoenix PnL evaluation) and signs the claim on the winner's behalf. The PDA still holds the funds; the program signs the outbound transfers regardless of who initiates.",
+    "fields": {
+      "battleId": "String!",
+      "winner": "Address!",
+      "betAmountMicro": "UInt!",
+      "claimedAt": "UInt!"
+    },
+    "onchain": true,
+    "rules": {
+      "read": "true",
+      "create": "@user.address == @constants.PROJECT_VAULT_ADDRESS && @newData.betAmountMicro > 0",
+      "update": "false",
+      "delete": "false"
+    },
+    "hooks": {
+      "onchain": {
+        "create": "@TokenPlugin.transfer(@newData.battleId, @newData.winner, @constants.USDC, (@newData.betAmountMicro * 2 * 98) // 100) && @TokenPlugin.transfer(@newData.battleId, @constants.ADMIN_ADDRESS, @constants.USDC, (@newData.betAmountMicro * 2 * 2) // 100)"
+      }
+    },
+    "operationDetails": {
+      "read": "Public (onchain). Anyone can read claim records.",
+      "create": "Backend-only (PROJECT_VAULT_ADDRESS). The backend determines the winner by querying Phoenix PnL for both participants, updates battles.$battleId.winner, then creates this claim with winner = winning wallet, betAmountMicro = the battle's bet amount, and $claimId = battleId (one claim per battle). Onchain hook performs an ATOMIC two-step transfer from the battle PDA (battleId is the PDA account ID, the program signs for it): (1) transfers 98% of the total pot — (2 * betAmountMicro * 98) / 100 USDC — to @newData.winner, and (2) transfers 2% platform fee — (2 * betAmountMicro * 2) / 100 USDC — to @constants.ADMIN_ADDRESS. Both transfers must succeed (chained with &&) — if either fails the entire claim is rolled back. Integer math: multiply before divide to avoid precision loss (1 micro-USDC rounding error possible on odd pots). Backend should also update battles.status to 'claimed' after this succeeds.",
+      "update": "Operation disallowed. Claims are immutable.",
+      "delete": "Operation disallowed. Claim records are permanent for audit."
+    }
+  },
+  "userPoints/$userAddress": {
+    "description": "Tracks total and category-specific points per user. Used for leaderboards and rewards. Backend (PROJECT_VAULT_ADDRESS) awards points; users cannot self-award.",
+    "fields": {
+      "address": "Address",
+      "totalPoints": "UInt",
+      "tradingPoints": "UInt",
+      "battlePoints": "UInt",
+      "socialPoints": "UInt",
+      "updatedAt": "UInt"
+    },
+    "onchain": false,
+    "rules": {
+      "read": "true",
+      "create": "@user.address == @constants.PROJECT_VAULT_ADDRESS || @user.address == @constants.ADMIN_ADDRESS",
+      "update": "@user.address == @constants.PROJECT_VAULT_ADDRESS || @user.address == @constants.ADMIN_ADDRESS",
+      "delete": "@user.address == @constants.ADMIN_ADDRESS"
+    },
+    "operationDetails": {
+      "read": "Anyone can read. Needed for leaderboard display.",
+      "create": "Only the backend vault (PROJECT_VAULT_ADDRESS) or admin can create points records. Users cannot self-award points.",
+      "update": "Only the backend vault (PROJECT_VAULT_ADDRESS) or admin can update points. Users earn points exclusively through controlled upstream hooks (trades, battles, social claims).",
+      "delete": "Admin only. The admin (ADMIN_ADDRESS) can delete a user's points record for moderation, which removes them from the leaderboard. Otherwise records are kept for audit and leaderboard integrity."
+    }
+  },
+  "pointsActivity/$activityId": {
+    "description": "Append-only audit log of every point award. Each entry records who got points, why, and how many. Used for transparency and activity feeds.",
+    "fields": {
+      "userAddress": "Address",
+      "activityType": "String",
+      "points": "UInt",
+      "description": "String?",
+      "createdAt": "UInt"
+    },
+    "onchain": false,
+    "rules": {
+      "read": "true",
+      "create": "@user.address == @constants.PROJECT_VAULT_ADDRESS || @user.address == @constants.ADMIN_ADDRESS",
+      "update": "false",
+      "delete": "@user.address == @constants.ADMIN_ADDRESS"
+    },
+    "operationDetails": {
+      "read": "Anyone can read. Provides public audit trail of point awards.",
+      "create": "Only the backend vault and admin can create activity entries. Used for append-only audit trail of point awards written by trusted hooks or backend processes.",
+      "update": "Operation disallowed. Activity log is append-only and immutable.",
+      "delete": "Admin only. The admin (ADMIN_ADDRESS) can delete activity entries as part of wiping a user's reward data. Otherwise the activity log is append-only and immutable."
+    }
+  },
+  "socialClaims/$userAddress": {
+    "description": "Tracks one-time social rewards claimed per user (Twitter follow, Telegram join). Document ID is user's wallet address so each user gets exactly one claims record. Honor-system based since X/Telegram don't expose verified-follow data without OAuth.",
+    "fields": {
+      "address": "Address",
+      "twitterFollowClaimed": "Bool",
+      "twitterFollowClaimedAt": "UInt?",
+      "telegramJoinClaimed": "Bool",
+      "telegramJoinClaimedAt": "UInt?"
+    },
+    "onchain": false,
+    "rules": {
+      "read": "true",
+      "create": "@user.address == @constants.PROJECT_VAULT_ADDRESS",
+      "update": "@user.address == @constants.PROJECT_VAULT_ADDRESS",
+      "delete": "@user.address == @constants.ADMIN_ADDRESS"
+    },
+    "operationDetails": {
+      "read": "Anyone can read. Allows displaying claim status publicly.",
+      "create": "Backend/vault only. The project vault writes claim records after verifying social actions off-chain. Offchain create hook auto-awards 500 socialPoints + 500 totalPoints per claim flag set to true at creation: ensures userPoints/$userAddress exists (creates with zeros if missing via putDocument), increments points per claimed flag using getAfter for staged-state arithmetic, and writes one pointsActivity entry per claim keyed by @time.now (each social reward is approved in a separate admin request at a different time, so @time.now differs naturally between rewards).",
+      "update": "Backend/vault only. Used to flip claim flags from false to true after off-chain verification. Offchain update hook detects flag flips (false → true via `@data.X == true || @newData.X != true` no-op check), ensures userPoints/$userAddress exists, awards 500 totalPoints + 500 socialPoints per newly-flipped flag, and writes one pointsActivity entry per newly-flipped flag keyed by @time.now. Already-true flags do not re-award.",
+      "delete": "Admin only. The admin (ADMIN_ADDRESS) can delete a user's social claims record for moderation as part of wiping reward data. No hooks run on delete, so points are not affected by the deletion itself."
+    },
+    "hooks": {
+      "offchain": {
+        "create": "((get(/userPoints/$userAddress) == null && @DocumentPlugin.putDocument(/userPoints/$userAddress, { address: $userAddress, totalPoints: 0, tradingPoints: 0, battlePoints: 0, socialPoints: 0, updatedAt: @time.now })) || true) && ((@newData.twitterFollowClaimed != true) || (@DocumentPlugin.updateField(/userPoints/$userAddress, 'totalPoints', getAfter(/userPoints/$userAddress).totalPoints + 500) && true)) && ((@newData.twitterFollowClaimed != true) || (@DocumentPlugin.updateField(/userPoints/$userAddress, 'socialPoints', getAfter(/userPoints/$userAddress).socialPoints + 500) && true)) && ((@newData.telegramJoinClaimed != true) || (@DocumentPlugin.updateField(/userPoints/$userAddress, 'totalPoints', getAfter(/userPoints/$userAddress).totalPoints + 500) && true)) && ((@newData.telegramJoinClaimed != true) || (@DocumentPlugin.updateField(/userPoints/$userAddress, 'socialPoints', getAfter(/userPoints/$userAddress).socialPoints + 500) && true)) && (@DocumentPlugin.updateField(/userPoints/$userAddress, 'updatedAt', @time.now) && true) && ((@newData.twitterFollowClaimed != true) || (@DocumentPlugin.putDocument(/pointsActivity/@time.now, { userAddress: $userAddress, activityType: 'follow_twitter', points: 500, description: 'Followed on Twitter', createdAt: @time.now }) && true)) && ((@newData.telegramJoinClaimed != true) || (@DocumentPlugin.putDocument(/pointsActivity/@time.now, { userAddress: $userAddress, activityType: 'join_telegram', points: 500, description: 'Joined Telegram', createdAt: @time.now }) && true))",
+        "update": "((get(/userPoints/$userAddress) == null && @DocumentPlugin.putDocument(/userPoints/$userAddress, { address: $userAddress, totalPoints: 0, tradingPoints: 0, battlePoints: 0, socialPoints: 0, updatedAt: @time.now })) || true) && ((@data.twitterFollowClaimed == true || @newData.twitterFollowClaimed != true) || (@DocumentPlugin.updateField(/userPoints/$userAddress, 'totalPoints', getAfter(/userPoints/$userAddress).totalPoints + 500) && true)) && ((@data.twitterFollowClaimed == true || @newData.twitterFollowClaimed != true) || (@DocumentPlugin.updateField(/userPoints/$userAddress, 'socialPoints', getAfter(/userPoints/$userAddress).socialPoints + 500) && true)) && ((@data.telegramJoinClaimed == true || @newData.telegramJoinClaimed != true) || (@DocumentPlugin.updateField(/userPoints/$userAddress, 'totalPoints', getAfter(/userPoints/$userAddress).totalPoints + 500) && true)) && ((@data.telegramJoinClaimed == true || @newData.telegramJoinClaimed != true) || (@DocumentPlugin.updateField(/userPoints/$userAddress, 'socialPoints', getAfter(/userPoints/$userAddress).socialPoints + 500) && true)) && (@DocumentPlugin.updateField(/userPoints/$userAddress, 'updatedAt', @time.now) && true) && ((@data.twitterFollowClaimed == true || @newData.twitterFollowClaimed != true) || (@DocumentPlugin.putDocument(/pointsActivity/@time.now, { userAddress: $userAddress, activityType: 'follow_twitter', points: 500, description: 'Followed on Twitter', createdAt: @time.now }) && true)) && ((@data.telegramJoinClaimed == true || @newData.telegramJoinClaimed != true) || (@DocumentPlugin.putDocument(/pointsActivity/@time.now, { userAddress: $userAddress, activityType: 'join_telegram', points: 500, description: 'Joined Telegram', createdAt: @time.now }) && true))"
+      }
+    }
+  },
+  "phoenixSubaccount/$subaccountId": {
+    "description": "Isolated margin subaccount metadata. Offchain tracking of user-created isolated subaccounts for Phoenix Perps.",
+    "fields": {
+      "wallet": "Address!",
+      "index": "UInt!",
+      "name": "String!",
+      "collateral": "UInt!",
+      "createdAt": "UInt!"
+    },
+    "onchain": false,
+    "rules": {
+      "read": "true",
+      "create": "@user.address != null && @user.address == @newData.wallet && @newData.index > 0",
+      "update": "@user.address == @data.wallet",
+      "delete": "@user.address == @data.wallet"
+    },
+    "operationDetails": {
+      "read": "Anyone can read. UI filters by wallet to show a user's isolated subaccounts.",
+      "create": "Authenticated users only. Caller must equal @newData.wallet. index must be > 0 (0 is reserved for cross-margin). Stores metadata about an isolated subaccount including display name and collateral balance (in USDC decimals, 6).",
+      "update": "Owner only. Only the wallet that created the subaccount can update its metadata (e.g. name, collateral tracking).",
+      "delete": "Owner only. Only the wallet that created the subaccount can delete its metadata record."
+    }
+  },
+  "phoenixIsolatedRegister/$registerId": {
+    "description": "Register and sync an isolated subaccount on Phoenix Perps. Bootstrap step before isolated trading.",
+    "fields": {
+      "subaccountIndex": "UInt!"
+    },
+    "onchain": true,
+    "isPassthrough": true,
+    "rules": {
+      "read": "true",
+      "create": "@user.address != null && @newData.subaccountIndex > 0",
+      "update": "false",
+      "delete": "false"
+    },
+    "hooks": {
+      "onchain": {
+        "create": "@PhoenixPerpsPlugin.registerTrader(@user.address, @newData.subaccountIndex) && @PhoenixPerpsPlugin.syncParentToChild(@user.address, @newData.subaccountIndex)"
+      }
+    },
+    "operationDetails": {
+      "read": "Anyone can read. Passthrough — no permanent document stored.",
+      "create": "Authenticated users only. Registers an isolated subaccount for the caller via @PhoenixPerpsPlugin.registerTrader(wallet, subaccountIndex) and then syncs parent-to-child capabilities via syncParentToChild(wallet, subaccountIndex). subaccountIndex must be > 0. User must already have collateral in cross-margin before this step.",
+      "update": "Operation disallowed.",
+      "delete": "Operation disallowed."
+    }
+  },
+  "phoenixIsolatedTransfer/$transferId": {
+    "description": "Transfer collateral from cross-margin to an isolated subaccount.",
+    "fields": {
+      "amt": "UInt!",
+      "subaccountIndex": "UInt!"
+    },
+    "onchain": true,
+    "isPassthrough": true,
+    "rules": {
+      "read": "true",
+      "create": "@user.address != null && @newData.amt > 0 && @newData.subaccountIndex > 0",
+      "update": "false",
+      "delete": "false"
+    },
+    "hooks": {
+      "onchain": {
+        "create": "@PhoenixPerpsPlugin.transferToIsolated(@user.address, @newData.amt, @newData.subaccountIndex)"
+      }
+    },
+    "operationDetails": {
+      "read": "Anyone can read. Passthrough — no permanent document stored.",
+      "create": "Authenticated users only. Transfers amt (in USDC/PhUSD base units, 6 decimals) from cross-margin to the isolated subaccount specified by subaccountIndex. Both amt and subaccountIndex must be > 0.",
+      "update": "Operation disallowed.",
+      "delete": "Operation disallowed."
+    }
+  },
+  "phoenixIsolatedSweep/$sweepId": {
+    "description": "Sweep free collateral from an isolated subaccount back to cross-margin.",
+    "fields": {
+      "subaccountIndex": "UInt!"
+    },
+    "onchain": true,
+    "isPassthrough": true,
+    "rules": {
+      "read": "true",
+      "create": "@user.address != null && @newData.subaccountIndex > 0",
+      "update": "false",
+      "delete": "false"
+    },
+    "hooks": {
+      "onchain": {
+        "create": "@PhoenixPerpsPlugin.transferToCross(@user.address, @newData.subaccountIndex)"
+      }
+    },
+    "operationDetails": {
+      "read": "Anyone can read. Passthrough — no permanent document stored.",
+      "create": "Authenticated users only. Sweeps all free collateral from the isolated subaccount (subaccountIndex > 0) back to cross-margin. Any open positions in the isolated subaccount will block the sweep.",
+      "update": "Operation disallowed.",
+      "delete": "Operation disallowed."
+    }
+  },
+  "appSettings/$settingId": {
+    "description": "Stores app-wide settings like logo URL. Admin-writable, publicly readable.",
+    "fields": {
+      "value": "String",
+      "label": "String",
+      "updatedAt": "UInt"
+    },
+    "rules": {
+      "read": "true",
+      "create": "@user.address == @constants.ADMIN_ADDRESS",
+      "update": "@user.address == @constants.ADMIN_ADDRESS",
+      "delete": "@user.address == @constants.ADMIN_ADDRESS"
+    },
+    "operationDetails": {
+      "read": "Anyone can read app settings.",
+      "create": "Admin only. Creates a new app setting entry.",
+      "update": "Admin only. Modifies an existing app setting value, label, or timestamp.",
+      "delete": "Admin only. Removes an app setting entry."
+    }
+  },
+  "promotionClaims/$claimId": {
+    "description": "Promotion link claims submitted by users. Each claim is reviewed by an admin. On approval, 1000 social and total points are auto-awarded via offchain hooks; on rejection from an approved state, points are deducted.",
+    "fields": {
+      "userAddress": "Address!",
+      "link": "String",
+      "status": "String",
+      "pointsAwarded": "UInt!",
+      "createdAt": "UInt!",
+      "updatedAt": "UInt",
+      "awarded": "Bool?"
+    },
+    "rules": {
+      "read": "@user.address == @data.userAddress || @user.address == @constants.ADMIN_ADDRESS",
+      "create": "@user.address == @constants.PROJECT_VAULT_ADDRESS && @newData.status == 'pending' && @newData.pointsAwarded == 1000",
+      "update": "(@user.address == @constants.PROJECT_VAULT_ADDRESS && @newData.status == 'pending') || (@user.address == @constants.ADMIN_ADDRESS && (@newData.status == 'approved' || @newData.status == 'rejected'))",
+      "delete": "@user.address == @constants.ADMIN_ADDRESS"
+    },
+    "hooks": {
+      "offchain": {
+        "update": "((get(/userPoints/@data.userAddress) == null && @DocumentPlugin.putDocument(/userPoints/@data.userAddress, { address: @data.userAddress, totalPoints: 0, tradingPoints: 0, battlePoints: 0, socialPoints: 0, updatedAt: @time.now })) || true) && ((@data.status != 'pending' || @newData.status != 'approved' || @data.awarded == true) || (@DocumentPlugin.updateField(/userPoints/@data.userAddress, 'totalPoints', getAfter(/userPoints/@data.userAddress).totalPoints + 1000) && true)) && ((@data.status != 'pending' || @newData.status != 'approved' || @data.awarded == true) || (@DocumentPlugin.updateField(/userPoints/@data.userAddress, 'socialPoints', getAfter(/userPoints/@data.userAddress).socialPoints + 1000) && true)) && ((@data.status != 'pending' || @newData.status != 'approved' || @data.awarded == true) || (@DocumentPlugin.updateField(/promotionClaims/$claimId, 'awarded', true) && true)) && ((@data.status != 'approved' || @newData.status != 'rejected') || (@DocumentPlugin.updateField(/userPoints/@data.userAddress, 'totalPoints', getAfter(/userPoints/@data.userAddress).totalPoints - 1000) && true)) && ((@data.status != 'approved' || @newData.status != 'rejected') || (@DocumentPlugin.updateField(/userPoints/@data.userAddress, 'socialPoints', getAfter(/userPoints/@data.userAddress).socialPoints - 1000) && true)) && (@DocumentPlugin.updateField(/userPoints/@data.userAddress, 'updatedAt', @time.now) && true) && ((@data.status != 'pending' || @newData.status != 'approved' || @data.awarded == true) || (@DocumentPlugin.putDocument(/pointsActivity/@time.now, { userAddress: @data.userAddress, activityType: 'promotion_approved', points: 1000, description: 'Promotion link approved', createdAt: @time.now }) && true)) && ((@data.status != 'approved' || @newData.status != 'rejected') || (@DocumentPlugin.putDocument(/pointsActivity/@time.now + 1, { userAddress: @data.userAddress, activityType: 'promotion_rejected', points: 1000, description: 'Promotion link rejected — points deducted', createdAt: @time.now }) && true))"
+      }
+    },
+    "operationDetails": {
+      "read": "Claim owner or admin can read. Users see only their own claims; admin sees all.",
+      "create": "Backend only. The promotion-claim submission now happens via the vault-signed Cloudflare Worker, so only PROJECT_VAULT_ADDRESS may create a claim. status must be 'pending' and pointsAwarded must be 1000. The backend enforces the 24h resubmit cooldown and the duplicate-link check (against promotionLinkRegistry) in code before writing. $claimId and userAddress remain the user's wallet address so the points-award hook keeps working unchanged.",
+      "update": "Two allowed update paths. (1) Backend resubmit: PROJECT_VAULT_ADDRESS (the vault-signed backend) may reset a claim back to status 'pending' to resubmit a new link; the 24h cooldown and duplicate-link check are enforced in backend code, not in the policy rule. userAddress is immutable (Address!). (2) Admin review: ADMIN_ADDRESS may set status to 'approved' or 'rejected' at any time (unchanged). pending->approved awards 1000 socialPoints + 1000 totalPoints, writes a pointsActivity entry, and sets the immutable 'awarded' guard so points can be awarded at most once per wallet. approved->rejected deducts 1000 socialPoints + 1000 totalPoints and writes a cancellation activity entry.",
+      "delete": "Admin only. The admin (ADMIN_ADDRESS) can delete a promotion claim as part of wiping a user's reward data. No hooks run on delete. Rejection (without data wipe) is handled via the update rule by setting status to 'rejected'."
+    }
+  },
+  "pendingSocialClaims/$userAddress": {
+    "description": "Queue for social reward claims awaiting admin approval. Users write their intention to claim Twitter follow or Telegram join rewards here. An admin/backend then reviews and approves by writing to the privileged socialClaims collection, which triggers point-award hooks.",
+    "fields": {
+      "address": "Address",
+      "twitterFollowPending": "Bool",
+      "twitterFollowRequestedAt": "UInt?",
+      "telegramJoinPending": "Bool",
+      "telegramJoinRequestedAt": "UInt?"
+    },
+    "rules": {
+      "read": "@user.address == @constants.ADMIN_ADDRESS || @user.address == @constants.PROJECT_VAULT_ADDRESS || @user.address == $userAddress",
+      "create": "@user.address == $userAddress || @user.address == @constants.PROJECT_VAULT_ADDRESS",
+      "update": "@user.address == $userAddress || @user.address == @constants.PROJECT_VAULT_ADDRESS || @user.address == @constants.ADMIN_ADDRESS",
+      "delete": "@user.address == @constants.ADMIN_ADDRESS"
+    },
+    "operationDetails": {
+      "read": "Admin, backend vault, and the document owner can read. Owner needs to see their pending status on the Rewards page.",
+      "create": "Owner or backend vault can create. Backend creates on behalf of users via the POST /api/social/claim/twitter and /telegram API routes.",
+      "update": "Owner, backend vault, or admin can update. Owner updates their own pending claim record; backend vault for administrative purposes. Admin can reject a pending social claim by clearing its pending flags (twitterFollowPending / telegramJoinPending to false) without awarding points — this collection has NO hooks, so clearing flags has no point side-effects (reject = no points; user can re-submit).",
+      "delete": "Admin only. The admin (ADMIN_ADDRESS) can delete a user's pending claim record as part of wiping all reward data."
+    }
+  },
+  "battleMessages/$messageId": {
+    "description": "Trash talk chat messages posted by authenticated wallets during trading battles. Public and immutable.",
+    "fields": {
+      "battleId": "String!",
+      "senderAddress": "Address!",
+      "text": "String!",
+      "emoji": "String?",
+      "createdAt": "UInt!"
+    },
+    "rules": {
+      "read": "true",
+      "create": "@user.address != null && @user.address == @newData.senderAddress",
+      "update": "false",
+      "delete": "@user.address == @constants.ADMIN_ADDRESS"
+    },
+    "operationDetails": {
+      "read": "Anyone can read battle messages. No authentication required. Useful for spectators and participants viewing trash talk tied to a specific battle.",
+      "create": "Authenticated users only. Caller must have a connected wallet and must post as themselves (@newData.senderAddress == @user.address). Messages are tied to a battle via battleId.",
+      "update": "Disallowed. Messages are immutable once posted.",
+      "delete": "Admin-only (cascade cleanup). Only @constants.ADMIN_ADDRESS can delete. When an admin deletes a battle, related battleMessages are removed alongside it. Offchain chat records, safe to delete permanently."
+    }
+  },
+  "potContributions/$contributionId": {
+    "description": "USDC pot boost contributions for any battle. Anyone can add to the prize pool. Onchain transfer into the battle PDA vault.",
+    "fields": {
+      "battleId": "String!",
+      "contributorAddress": "Address!",
+      "amountMicro": "UInt!",
+      "note": "String?",
+      "createdAt": "UInt!"
+    },
+    "onchain": true,
+    "rules": {
+      "read": "true",
+      "create": "@user.address != null && @user.address == @newData.contributorAddress && @newData.amountMicro > 0",
+      "update": "false",
+      "delete": "false"
+    },
+    "hooks": {
+      "onchain": {
+        "create": "@TokenPlugin.transfer(@user.address, @newData.battleId, @constants.USDC, @newData.amountMicro)"
+      }
+    },
+    "operationDetails": {
+      "read": "Public (onchain). Anyone can read contribution records.",
+      "create": "Authenticated users only. Caller must equal @newData.contributorAddress. amountMicro must be > 0 (micro-USDC, 6 decimals). Onchain hook transfers amountMicro USDC from the contributor's wallet into the battle's PDA vault (same PDA as participant bets, keyed by battleId). The battle-resolver sums all contributions + participant bets to compute the total pot at resolution time.",
+      "update": "Operation disallowed. Contributions are immutable.",
+      "delete": "Operation disallowed. Contribution records are permanent for audit."
+    }
+  },
+  "rumbleClaims/$claimId": {
+    "description": "Royal Rumble 3-winner payout claim. Backend-only. One claim per battle (claimId = battleId). Splits total pot 49.5% / 34.65% / 14.85% / 1% platform fee.",
+    "fields": {
+      "battleId": "String!",
+      "winner1": "Address!",
+      "winner2": "Address!",
+      "winner3": "Address!",
+      "totalPotMicro": "UInt!",
+      "claimedAt": "UInt!"
+    },
+    "onchain": true,
+    "rules": {
+      "read": "true",
+      "create": "@user.address == @constants.PROJECT_VAULT_ADDRESS && @newData.totalPotMicro > 0",
+      "update": "false",
+      "delete": "false"
+    },
+    "hooks": {
+      "onchain": {
+        "create": "@TokenPlugin.transfer(@newData.battleId, @newData.winner1, @constants.USDC, (@newData.totalPotMicro * 4950) // 10000) && @TokenPlugin.transfer(@newData.battleId, @newData.winner2, @constants.USDC, (@newData.totalPotMicro * 3465) // 10000) && @TokenPlugin.transfer(@newData.battleId, @newData.winner3, @constants.USDC, (@newData.totalPotMicro * 1485) // 10000) && @TokenPlugin.transfer(@newData.battleId, @constants.ADMIN_ADDRESS, @constants.USDC, (@newData.totalPotMicro * 100) // 10000)"
+      }
+    },
+    "operationDetails": {
+      "read": "Public (onchain). Anyone can read claim records.",
+      "create": "Backend-only (PROJECT_VAULT_ADDRESS). The battle-resolver determines top 3 by PnL%, computes totalPotMicro by summing all battleParticipants bets + potContributions for this battle, then creates this claim. Onchain hook performs 4 atomic transfers from the battle PDA: 49.5% to winner1, 34.65% to winner2, 14.85% to winner3, 1% platform fee to ADMIN_ADDRESS. Integer math: multiply before divide (4950/10000, 3465/10000, 1485/10000, 100/10000). All 4 transfers must succeed or the entire claim rolls back.",
+      "update": "Operation disallowed. Claims are immutable.",
+      "delete": "Operation disallowed. Claim records are permanent for audit."
+    }
+  },
+  "battleRefunds/$refundId": {
+    "description": "Royal Rumble participant refund when a rumble is cancelled (insufficient participants). Backend-only. One refund per participant per battle.",
+    "fields": {
+      "battleId": "String!",
+      "wallet": "Address!",
+      "amountMicro": "UInt!",
+      "refundedAt": "UInt!"
+    },
+    "onchain": true,
+    "rules": {
+      "read": "true",
+      "create": "@user.address == @constants.PROJECT_VAULT_ADDRESS && @newData.amountMicro > 0",
+      "update": "false",
+      "delete": "false"
+    },
+    "hooks": {
+      "onchain": {
+        "create": "@TokenPlugin.transfer(@newData.battleId, @newData.wallet, @constants.USDC, @newData.amountMicro)"
+      }
+    },
+    "operationDetails": {
+      "read": "Public (onchain). Anyone can read refund records.",
+      "create": "Backend-only (PROJECT_VAULT_ADDRESS). Created by the battle-resolver when cancelling a Royal Rumble that expired without enough participants. One refund record per participant (ID = {battleId}_{walletAddress}). Onchain hook transfers amountMicro USDC from the battle PDA back to @newData.wallet.",
+      "update": "Operation disallowed. Refunds are immutable.",
+      "delete": "Operation disallowed. Refund records are permanent for audit."
+    }
+  },
+  "battleSpectators/$spectatorId": {
+    "description": "Tracks wallets watching a battle live. Used for spectator count display and watch badges.",
+    "fields": {
+      "battleId": "String!",
+      "walletAddress": "Address!",
+      "joinedAt": "UInt!"
+    },
+    "onchain": false,
+    "rules": {
+      "read": "true",
+      "create": "@user.address != null && @user.address == @newData.walletAddress",
+      "update": "false",
+      "delete": "@user.address == @data.walletAddress || @user.address == @constants.ADMIN_ADDRESS"
+    },
+    "operationDetails": {
+      "read": "Anyone can read spectator records. Useful for displaying live spectator counts per battle.",
+      "create": "Authenticated users only. Caller must equal @newData.walletAddress. One spectator record per wallet per battle (use battleId_walletAddress as $spectatorId to enforce uniqueness). No financial component — purely for spectator count and watch badges.",
+      "update": "Operation disallowed. Spectator records are immutable.",
+      "delete": "A spectator can remove their own record (stop watching), OR @constants.ADMIN_ADDRESS can delete for cascade cleanup when an admin deletes a battle. Offchain spectator tracking, safe to delete."
+    }
+  },
+  "phoenixTradeRecord/$recordId": {
+    "description": "Offchain record of a completed Phoenix perps trade, written ONLY by the backend (PROJECT_VAULT_ADDRESS) AFTER it verifies the on-chain order tx (placed via the Rise Flight SDK on the frontend) actually confirmed. Mirrors the legacy onchain phoenixOrder fields so the UI can render identical order history, plus the on-chain tx signature and a timestamp. On create, the offchain hook awards trading points ($1 of notional sizeUsd = 1 point) and appends a pointsActivity entry — replicating the points logic that previously lived in phoenixOrder's offchain create hook. Users cannot self-write these records, preventing points farming.",
+    "fields": {
+      "trader": "Address!",
+      "market": "Address!",
+      "symbol": "String!",
+      "side": "String!",
+      "sizeBaseLots": "UInt!",
+      "leverage": "UInt!",
+      "orderType": "String!",
+      "limitPrice": "UInt?",
+      "stopLoss": "UInt?",
+      "takeProfit": "UInt?",
+      "subaccountIndex": "UInt!",
+      "sizeUsd": "UInt!",
+      "txSignature": "String!",
+      "createdAt": "UInt!"
+    },
+    "onchain": false,
+    "rules": {
+      "read": "true",
+      "create": "@user.address == @constants.PROJECT_VAULT_ADDRESS",
+      "update": "false",
+      "delete": "false"
+    },
+    "hooks": {
+      "offchain": {
+        "create": "((get(/userPoints/@newData.trader) != null && @DocumentPlugin.updateField(/userPoints/@newData.trader, 'tradingPoints', get(/userPoints/@newData.trader).tradingPoints + @newData.sizeUsd) && @DocumentPlugin.updateField(/userPoints/@newData.trader, 'totalPoints', get(/userPoints/@newData.trader).totalPoints + @newData.sizeUsd) && @DocumentPlugin.updateField(/userPoints/@newData.trader, 'updatedAt', @time.now)) || (get(/userPoints/@newData.trader) == null && @DocumentPlugin.putDocument(/userPoints/@newData.trader, { address: @newData.trader, totalPoints: @newData.sizeUsd, tradingPoints: @newData.sizeUsd, battlePoints: 0, socialPoints: 0, updatedAt: @time.now }))) && @DocumentPlugin.putDocument(/pointsActivity/@time.now, { userAddress: @newData.trader, activityType: \"trade\", points: @newData.sizeUsd, description: \"Phoenix trade placed\", createdAt: @time.now })"
+      }
+    },
+    "operationDetails": {
+      "read": "Anyone can read (order history is public, same as phoenixOrder). UI typically filters by @data.trader == current wallet to show that user's order history.",
+      "create": "ONLY the backend vault (PROJECT_VAULT_ADDRESS) can create — enforced by @user.address == @constants.PROJECT_VAULT_ADDRESS. The backend writes this record only AFTER verifying the on-chain Phoenix order tx (placed via the Rise Flight SDK on the frontend) actually confirmed, then includes txSignature. Users CANNOT self-write records, preventing points farming. On create, the offchain hook awards trading points equal to sizeUsd (notional USD, $1 = 1 point): it increments tradingPoints/totalPoints on the existing /userPoints/{trader} document or creates it if missing, updates updatedAt, and appends a /pointsActivity entry keyed by @time.now. sizeUsd MUST be the floor of the notional USD value.",
+      "update": "Operation disallowed. Trade records are immutable once written.",
+      "delete": "Operation disallowed. Trade records form a permanent history for order history and points auditing."
+    }
+  },
+  "ads/$adId": {
+    "description": "Admin-managed promotional ads displayed in a rotating carousel on the Trade page for logged-out visitors. Each ad has a title, short description, an uploaded image or video media URL, and an optional click-through link URL. Publicly readable; only the project owner admin can create, update, or delete ads.",
+    "fields": {
+      "title": "String",
+      "description": "String",
+      "mediaUrl": "String",
+      "mediaType": "String",
+      "active": "Bool",
+      "createdAt": "UInt",
+      "linkUrl": "String?"
+    },
+    "onchain": false,
+    "rules": {
+      "read": "true",
+      "create": "@user.address == @constants.ADMIN_ADDRESS",
+      "update": "@user.address == @constants.ADMIN_ADDRESS",
+      "delete": "@user.address == @constants.ADMIN_ADDRESS"
+    },
+    "operationDetails": {
+      "read": "Anyone (including logged-out visitors) can read all ads. Returns all fields. Frontend filters by active==true for the public carousel.",
+      "create": "Only the project owner admin wallet (@user.address == @constants.ADMIN_ADDRESS) can create ads. Frontend must provide title, description, mediaUrl (public URL of uploaded media), mediaType ('image' or 'video'), active (Bool, typically true), and createdAt (Unix seconds). Optionally provide linkUrl (a click-through destination URL); when set, the carousel slide becomes clickable and opens this URL.",
+      "update": "Only the admin wallet can update ads, including toggling the 'active' flag to show/hide an ad or editing title/description/media/linkUrl.",
+      "delete": "Only the admin wallet can delete ads."
+    }
+  },
+  "solTransfer/$transferId": {
+    "description": "Send native SOL from the caller's connected wallet to an arbitrary recipient address. Transient onchain passthrough action — no permanent state stored.",
+    "fields": {
+      "recipient": "Address",
+      "amt": "UInt"
+    },
+    "onchain": true,
+    "isPassthrough": true,
+    "rules": {
+      "read": "true",
+      "create": "@user.address != null",
+      "update": "false",
+      "delete": "false"
+    },
+    "hooks": {
+      "onchain": {
+        "create": "@TokenPlugin.transfer(@user.address, @newData.recipient, @constants.SOL, @newData.amt)"
+      }
+    },
+    "operationDetails": {
+      "read": "Anyone can read. Passthrough — no permanent document stored.",
+      "create": "Authenticated users only. Performs a user-signed native SOL transfer from the caller's own connected wallet (@user.address is the source and signer) to the arbitrary recipient address provided in @newData.recipient. Uses @TokenPlugin.transfer with the native SOL mint (@constants.SOL). `amt` is in lamports (9 decimals: 1 SOL = 1,000,000,000 lamports); the frontend must convert the human SOL amount to lamports before calling. The SOL is deducted from the caller's wallet; the frontend should leave headroom for transaction fees and not attempt to send the entire balance.",
+      "update": "Operation disallowed. Transfers are atomic, single-shot operations.",
+      "delete": "Operation disallowed. Passthrough action — no document to delete."
+    }
+  },
+  "socialLinks/$storageKey": {
+    "description": "Stores a user's linked social account (e.g. X/Twitter) from Poof's OAuth flow. Document ID ($storageKey) follows the format social:{wallet}:{provider}. Written by the partyserver OAuth callback and social-links routes (signed by PROJECT_VAULT_ADDRESS). Publicly readable so the leaderboard can show each user's connected X avatar and username alongside their wallet.",
+    "fields": {
+      "wallet": "Address",
+      "provider": "String",
+      "profile": "String",
+      "linkedAt": "Int"
+    },
+    "onchain": false,
+    "rules": {
+      "read": "true",
+      "create": "@user.address == @newData.wallet || @user.address == @constants.PROJECT_VAULT_ADDRESS",
+      "update": "@user.address == @data.wallet || @user.address == @constants.PROJECT_VAULT_ADDRESS",
+      "delete": "@user.address == @data.wallet || @user.address == @constants.PROJECT_VAULT_ADDRESS"
+    },
+    "operationDetails": {
+      "read": "Public. Anyone can read any social link record. The leaderboard reads everyone's linked X profile (avatar + username) to display alongside wallet addresses. Profile is a JSON string containing id, username, email, avatar, displayName, metadata.",
+      "create": "Created by the OAuth callback route (partyserver), which signs Tarobase requests as PROJECT_VAULT_ADDRESS; the owning wallet (@newData.wallet) is also permitted. storageKey format is social:{wallet}:{provider} using colon separators. Exactly 4 fields are allowed: wallet (Address), provider (String), profile (JSON String), linkedAt (Int Unix ms).",
+      "update": "Updated by the server (PROJECT_VAULT_ADDRESS) to refresh profile data, or by the owning wallet (@data.wallet). No other users may update.",
+      "delete": "Deleted by the server (PROJECT_VAULT_ADDRESS) when a user disconnects via the social-links API, or by the owning wallet (@data.wallet). No other users may delete."
+    }
+  },
+  "pnlLeaderboard/$entryId": {
+    "description": "Precomputed per-trader, per-period realized PnL aggregates for the public leaderboard. Written exclusively by the backend Heartbeat task signing as PROJECT_VAULT_ADDRESS. entryId is a deterministic composite like '{period}:{traderAddress}' so the task can upsert each row on every run. Read-only cache table with no hooks or side effects.",
+    "fields": {
+      "trader": "Address",
+      "period": "String",
+      "realizedPnlUsdCents": "Int",
+      "tradeCount": "UInt",
+      "updatedAt": "UInt",
+      "rank": "UInt",
+      "pnlHidden": "Bool"
+    },
+    "onchain": false,
+    "rules": {
+      "read": "true",
+      "create": "@user.address == @constants.PROJECT_VAULT_ADDRESS",
+      "update": "@user.address == @constants.PROJECT_VAULT_ADDRESS",
+      "delete": "@user.address == @constants.PROJECT_VAULT_ADDRESS"
+    },
+    "operationDetails": {
+      "read": "Anyone can read. Leaderboard is fully public. Exposes trader address, period, signed realized PnL in US cents, trade count, last-updated timestamp, 1-based rank, and whether the trader hid their PnL.",
+      "create": "Backend Heartbeat task only (caller must equal @constants.PROJECT_VAULT_ADDRESS). Creates one row per trader per period. entryId is a deterministic composite such as '{period}:{traderAddress}'. realizedPnlUsdCents is a SIGNED Int and CAN BE NEGATIVE. rank is the 1-based leaderboard position computed from true PnL ordering so position is preserved even when PnL is withheld. pnlHidden is true when the trader opted to hide their PnL (read from leaderboardPrivacy). All numeric fields are required (no nulls).",
+      "update": "Backend Heartbeat task only (caller must equal @constants.PROJECT_VAULT_ADDRESS). The task overwrites the full row on every run with refreshed PnL, tradeCount, updatedAt, rank, and pnlHidden. When pnlHidden is true the task does NOT write the real PnL value into realizedPnlUsdCents. No fields are immutable so the upsert can always rewrite.",
+      "delete": "Backend Heartbeat task only (caller must equal @constants.PROJECT_VAULT_ADDRESS). Used to clear a trader who falls out of a rolling time window (daily/weekly/monthly)."
+    }
+  },
+  "apkFiles/$fileId": {
+    "description": "APK file storage for the Aeonian Android dApp. Admin uploads release APKs here; files are publicly readable so anyone can download via the returned public URL.",
+    "type": "storage",
+    "rules": {
+      "read": "true",
+      "create": "@user.address == @constants.ADMIN_ADDRESS",
+      "update": "false",
+      "delete": "@user.address == @constants.ADMIN_ADDRESS"
+    },
+    "operationDetails": {
+      "read": "Anyone (no auth required). Public read so the APK can be downloaded directly from the returned public URL.",
+      "create": "Admin only (@user.address == @constants.ADMIN_ADDRESS). Admin uploads the APK file via the in-app upload UI.",
+      "update": "Operation disallowed. Stored files are immutable; admin re-uploads a new file for a new release.",
+      "delete": "Admin only (@user.address == @constants.ADMIN_ADDRESS). Admin can remove an old APK file."
+    }
+  },
+  "apkRelease/$releaseId": {
+    "description": "Current Aeonian Android dApp release metadata. Single shared document keyed by the constant id 'current' (apkRelease/current). Publicly readable so the /download page can show the latest release; admin-only create/update.",
+    "fields": {
+      "fileUrl": "String",
+      "version": "String",
+      "fileName": "String",
+      "updatedAt": "UInt"
+    },
+    "onchain": false,
+    "rules": {
+      "read": "true",
+      "create": "@user.address == @constants.ADMIN_ADDRESS && $releaseId == @constants.APK_RELEASE_ID",
+      "update": "@user.address == @constants.ADMIN_ADDRESS && $releaseId == @constants.APK_RELEASE_ID",
+      "delete": "false"
+    },
+    "operationDetails": {
+      "read": "Anyone (no auth required). Public read so the /download page can display the current release metadata (fileUrl, version, fileName, updatedAt).",
+      "create": "Admin only (@user.address == @constants.ADMIN_ADDRESS). Document id must equal @constants.APK_RELEASE_ID ('current'), enforcing a single shared release doc at apkRelease/current. Admin creates it on first upload via the UI. updatedAt is a Unix-seconds timestamp.",
+      "update": "Admin only (@user.address == @constants.ADMIN_ADDRESS). Document id must equal @constants.APK_RELEASE_ID ('current'). Admin overwrites fileUrl, version, fileName, and updatedAt when publishing a new release.",
+      "delete": "Operation disallowed. The current-release record is never deleted; it is overwritten on each new release."
+    }
+  },
+  "leaderboardPrivacy/$userAddress": {
+    "description": "Per-user privacy preference for the public PnL leaderboard. Document ID is the user's own wallet address so each user gets exactly one preference record. When hidePnl is true, the backend Heartbeat task still includes the user on the leaderboard (rank + name preserved) but withholds the real realizedPnlUsdCents value. All fields are freely re-writable (no immutable modifiers) because users toggle this preference repeatedly, which means repeated UPDATEs over the same wallet-keyed doc.",
+    "fields": {
+      "hidePnl": "Bool",
+      "updatedAt": "UInt"
+    },
+    "onchain": false,
+    "rules": {
+      "read": "true",
+      "create": "@user.address == $userAddress",
+      "update": "@user.address == $userAddress",
+      "delete": "@user.address == $userAddress || @user.address == @constants.PROJECT_VAULT_ADDRESS"
+    },
+    "operationDetails": {
+      "read": "Anyone can read. Must be public so both the leaderboard UI and the backend Heartbeat task can read each user's privacy preference.",
+      "create": "Authenticated user only, and only for their OWN doc: caller wallet (@user.address) must equal the document key ($userAddress). hidePnl is a required Bool (true = hide my PnL number). updatedAt is a required UInt (Unix seconds). No fields are immutable.",
+      "update": "Owner only: caller wallet must equal the document key ($userAddress). Used to toggle hidePnl on/off repeatedly. All fields are freely re-writable since no field is marked immutable.",
+      "delete": "Owner only, or the backend vault (PROJECT_VAULT_ADDRESS) for cleanup. Removing the doc reverts the user to the default (PnL shown)."
+    }
+  },
+  "phoenixIsoTrade/$tradeId": {
+    "description": "Atomic isolated-margin order entry. A single onchain CREATE hook bundles registerTrader + syncParentToChild + transferToIsolated + placeLong/placeShort in one Phoenix CPI transaction, so RiskView always evaluates the order AFTER the transferred collateral has landed in the isolated subaccount. Replaces the old multi-tx flow (phoenixIsolatedRegister -> phoenixSubaccount sync -> phoenixIsolatedTransfer -> phoenixOrder + 120s polling). Passthrough: stores only the fields needed to drive the hook and let the frontend read back the result (notably tarobase_transaction_hash). Trading points ARE awarded directly by this collection's own offchain CREATE hook: it increments the trader's tradingPoints (and totalPoints) in userPoints by the trade's USD size (sizeUsd) and writes a pointsActivity record. Isolated-margin trades do NOT go through the phoenixTradeRecord collection at all. Cross-margin trading continues to use phoenixOrder unchanged.",
+    "fields": {
+      "trader": "Address!",
+      "market": "Address!",
+      "symbol": "String!",
+      "side": "String!",
+      "sizeBaseLots": "UInt!",
+      "leverage": "UInt!",
+      "subaccountIndex": "UInt!",
+      "transferAmt": "UInt!",
+      "sizeUsd": "UInt!"
+    },
+    "onchain": true,
+    "isPassthrough": true,
+    "rules": {
+      "read": "true",
+      "create": "@user.address == @newData.trader && @newData.subaccountIndex > 0 && @newData.transferAmt > 0 && (@newData.side == \"long\" || @newData.side == \"short\")",
+      "update": "false",
+      "delete": "false"
+    },
+    "hooks": {
+      "onchain": {
+        "create": "@PhoenixPerpsPlugin.registerTrader(@user.address, @newData.subaccountIndex) && @PhoenixPerpsPlugin.syncParentToChild(@user.address, @newData.subaccountIndex) && @PhoenixPerpsPlugin.transferToIsolated(@user.address, @newData.transferAmt, @newData.subaccountIndex) && ((@newData.side == \"long\" && @PhoenixPerpsPlugin.placeLong(@user.address, @newData.market, @newData.sizeBaseLots, @newData.subaccountIndex)) || (@newData.side == \"short\" && @PhoenixPerpsPlugin.placeShort(@user.address, @newData.market, @newData.sizeBaseLots, @newData.subaccountIndex)))"
+      },
+      "offchain": {
+        "create": "((get(/userPoints/@newData.trader) != null && @DocumentPlugin.updateField(/userPoints/@newData.trader, 'tradingPoints', get(/userPoints/@newData.trader).tradingPoints + @newData.sizeUsd) && @DocumentPlugin.updateField(/userPoints/@newData.trader, 'totalPoints', get(/userPoints/@newData.trader).totalPoints + @newData.sizeUsd) && @DocumentPlugin.updateField(/userPoints/@newData.trader, 'updatedAt', @time.now)) || (get(/userPoints/@newData.trader) == null && @DocumentPlugin.putDocument(/userPoints/@newData.trader, { address: @newData.trader, totalPoints: @newData.sizeUsd, tradingPoints: @newData.sizeUsd, battlePoints: 0, socialPoints: 0, updatedAt: @time.now }))) && @DocumentPlugin.putDocument(/pointsActivity/@time.now, { userAddress: @newData.trader, activityType: \"trade\", points: @newData.sizeUsd, description: \"Phoenix isolated trade placed\", createdAt: @time.now })"
+      }
+    },
+    "operationDetails": {
+      "read": "Anyone can read (onchain data is public). UI filters by @data.trader == current wallet. The resulting Phoenix CPI transaction signature is available on the standard tarobase_transaction_hash field of the created document.",
+      "create": "Authenticated users only. Caller wallet (@user.address) must equal @newData.trader. side must be exactly 'long' or 'short'. subaccountIndex must be > 0 (isolated subaccount; 0 is reserved for cross-margin). transferAmt (PhUSD/USDC base units, 6 decimals) must be > 0. The market pubkey is NOT enumerated against a per-market whitelist — any live Phoenix market is accepted so newly-listed markets work without policy edits. SECURITY: this is safe because the collateral-moving leg transferToIsolated does NOT take @newData.market; its destination is fully derived from @user.address (the signer, enforced by @user.address==@newData.trader) and @newData.subaccountIndex, so an attacker-supplied market pubkey cannot redirect collateral. @newData.market is consumed ONLY by the final placeLong/placeShort leg, where the Phoenix on-chain program validates the orderbook account; a bogus market account reverts the entire atomic CPI tx (transferToIsolated reverts too), so the worst case is a self-DoS, never fund diversion. The single onchain hook runs four Phoenix steps atomically in one CPI tx, in order: (1) registerTrader (idempotent), (2) syncParentToChild, (3) transferToIsolated (cross -> isolated subaccount), (4) placeLong/placeShort with sizeBaseLots on the subaccountIndex. RiskView always sees post-transfer collateral. User must already have transferAmt of free cross-margin collateral. Trading points awarded by this collection's offchain hook (sizeUsd). No backend/vault writes — user-signed from frontend.",
+      "update": "Operation disallowed. Isolated trade entries are immutable once placed.",
+      "delete": "Operation disallowed. Records form a permanent history."
+    }
+  },
+  "phoenixIsoClose/$closeId": {
+    "description": "Atomically closes (reduces) an isolated-margin Phoenix Perps position. A single onchain CREATE hook runs syncParentToChild FIRST, then a reduce order (placeLong/placeShort in the CLOSE direction) in one Phoenix CPI transaction, so RiskView evaluates the reduce against current subaccount state. Unlike phoenixIsoTrade (entry), a close needs NO registerTrader and NO transferToIsolated — the isolated subaccount already exists and is funded; only syncParentToChild + the reduce order are required. This collection exists because closing an isolated position via phoenixOrder fails on-chain: phoenixOrder's hook runs only placeLong/placeShort with no syncParentToChild, and every subaccountIndex > 0 (isolated) operation requires syncParentToChild before the order touches that subaccount. Passthrough: stores only the fields needed to drive the hook and let the frontend read back the result (notably tarobase_transaction_hash). A close is also a trade for points purposes, so trading points ARE awarded directly by this collection's own offchain CREATE hook: it increments the trader's tradingPoints (and totalPoints) in userPoints by the close's USD size (sizeUsd) and writes a pointsActivity record. Isolated closes do NOT go through phoenixTradeRecord. Only for isolated subaccounts (subaccountIndex > 0); cross-margin closing continues to use phoenixOrder unchanged.",
+    "fields": {
+      "trader": "Address!",
+      "market": "Address!",
+      "symbol": "String!",
+      "side": "String!",
+      "sizeBaseLots": "UInt!",
+      "subaccountIndex": "UInt!",
+      "sizeUsd": "UInt!",
+      "isFullClose": "Bool!"
+    },
+    "onchain": true,
+    "isPassthrough": true,
+    "rules": {
+      "read": "true",
+      "create": "@user.address == @newData.trader && @newData.subaccountIndex > 0 && (@newData.side == \"long\" || @newData.side == \"short\")",
+      "update": "false",
+      "delete": "false"
+    },
+    "hooks": {
+      "onchain": {
+        "create": "@PhoenixPerpsPlugin.syncParentToChild(@user.address, @newData.subaccountIndex) && ((@newData.side == \"short\" && @PhoenixPerpsPlugin.closePosition(@user.address, @newData.market, @newData.sizeBaseLots, 1, @newData.subaccountIndex)) || (@newData.side == \"long\" && @PhoenixPerpsPlugin.closePosition(@user.address, @newData.market, @newData.sizeBaseLots, 0, @newData.subaccountIndex))) && ((@newData.isFullClose == true && @PhoenixPerpsPlugin.transferToCross(@user.address, @newData.subaccountIndex)) || @newData.isFullClose == false)"
+      },
+      "offchain": {
+        "create": "((get(/userPoints/@newData.trader) != null && @DocumentPlugin.updateField(/userPoints/@newData.trader, 'tradingPoints', get(/userPoints/@newData.trader).tradingPoints + @newData.sizeUsd) && @DocumentPlugin.updateField(/userPoints/@newData.trader, 'totalPoints', get(/userPoints/@newData.trader).totalPoints + @newData.sizeUsd) && @DocumentPlugin.updateField(/userPoints/@newData.trader, 'updatedAt', @time.now)) || (get(/userPoints/@newData.trader) == null && @DocumentPlugin.putDocument(/userPoints/@newData.trader, { address: @newData.trader, totalPoints: @newData.sizeUsd, tradingPoints: @newData.sizeUsd, battlePoints: 0, socialPoints: 0, updatedAt: @time.now }))) && @DocumentPlugin.putDocument(/pointsActivity/@time.now, { userAddress: @newData.trader, activityType: \"trade\", points: @newData.sizeUsd, description: \"Phoenix isolated position closed\", createdAt: @time.now })"
+      }
+    },
+    "operationDetails": {
+      "read": "Anyone can read (onchain data is public). UI filters by @data.trader == current wallet. The resulting Phoenix CPI transaction signature is available on the standard tarobase_transaction_hash field of the created document.",
+      "create": "Authenticated users only. Caller wallet (@user.address) must equal @newData.trader. side must be exactly 'long' or 'short' — this is the CLOSE/reduce direction (opposite of the open side): 'short' means sell-to-close a long, 'long' means buy-to-close a short. subaccountIndex must be > 0 (isolated subaccount only; cross-margin closing uses phoenixOrder). isFullClose (Bool) declares the frontend's intent: true ONLY when sizeBaseLots equals the ENTIRE remaining position size (a complete close); false for any partial reduce. The single onchain hook runs up to three Phoenix steps ATOMICALLY in one CPI tx, in order: (1) syncParentToChild (required so RiskView evaluates the reduce against current isolated-subaccount state), (2) closePosition with sizeBaseLots on subaccountIndex emitting a ReduceOnly order — side mapped from the stored string ('short'->1/Ask closes a long, 'long'->0/Bid closes a short), (3) ONLY when isFullClose==true, transferToCross sweeps the now-freed collateral from the isolated subaccount back to cross. When isFullClose==false the third leg is skipped entirely and the operation is close-only, identical to the prior behavior. SWEEP GATING / SAFETY: the sweep is gated on the frontend-declared isFullClose flag so partial closes never sweep. As a hard secondary guarantee, transferToCross by design sweeps ONLY free (uncommitted) PhUSD and never collateral backing an open position, so even a mis-declared full close cannot pull margin out from under a position that remains open — Phoenix simply moves whatever isn't committed. The market pubkey is NOT enumerated against a per-market whitelist — any live Phoenix market is accepted. SECURITY: safe because the only collateral-relevant legs (syncParentToChild, transferToCross) derive their target subaccount entirely from @user.address (the signer, enforced by @user.address==@newData.trader) and @newData.subaccountIndex; an attacker-supplied market pubkey cannot redirect anything and only affects the closePosition reduce leg, where the Phoenix on-chain program validates the orderbook account (a bogus market reverts the user's own atomic CPI tx — self-DoS, never fund diversion). closePosition only reduces, never flips. The isolated subaccount must already exist and hold the position being reduced. Trading points awarded by this collection's offchain hook (sizeUsd). No backend/vault writes — user-signed from frontend. The manual phoenixIsolatedSweep collection remains the fallback for partial-close residual sweeps and pre-existing stuck collateral.",
+      "update": "Operation disallowed. Isolated close entries are immutable once placed.",
+      "delete": "Operation disallowed. Records form a permanent history."
+    }
+  },
+  "follows/$followId": {
+    "description": "Directed follow relationship. One user (follower) follows a trader (followed). Created and deleted directly by users from the frontend (user-signed). $followId is a deterministic composite '{followerAddress}:{followedAddress}' so a user can follow a given trader at most once. Follower/following counts are computed by the UI via where-clause queries, not denormalized.",
+    "fields": {
+      "follower": "Address!",
+      "followed": "Address!",
+      "createdAt": "UInt!"
+    },
+    "onchain": false,
+    "rules": {
+      "read": "true",
+      "create": "@user.address == @newData.follower",
+      "update": "false",
+      "delete": "@user.address == @data.follower || @user.address == @constants.PROJECT_VAULT_ADDRESS"
+    },
+    "operationDetails": {
+      "read": "Anyone can read (public). Needed so the UI can compute follower counts via where-clause queries on 'followed' and 'who am I following' via queries on 'follower'. Shows all fields.",
+      "create": "Authenticated users only, and only for themselves: caller wallet (@user.address) must equal @newData.follower. Frontend generates $followId as the deterministic composite '{followerAddress}:{followedAddress}' (colon separator) to enforce at-most-one follow per (follower, followed) pair. No hooks. createdAt is Unix seconds.",
+      "update": "Operation disallowed (rule is false). Follows are immutable; to unfollow then re-follow, delete and re-create.",
+      "delete": "The follower themselves (@user.address == @data.follower) or the backend vault (@constants.PROJECT_VAULT_ADDRESS) for cleanup. Unfollow = delete."
+    }
+  },
+  "notifications/$notificationId": {
+    "description": "In-app notification fanned out to a user. Created ONLY by the backend (signing as PROJECT_VAULT_ADDRESS). Supports four types: 'open'/'close' (a trader the recipient follows opened or closed a trade), 'follow' (the recipient gained a new follower), and 'liquidated' (a trader the recipient follows, or the recipient themselves, was liquidated on Phoenix). For trade notifications ('open'/'close'), symbol and side are present (and pnlUsdCents/bigWin for 'close' events). For 'follow' notifications, symbol/side/pnlUsdCents/bigWin are ABSENT, actor is the new follower and recipient is the trader who was followed. For 'liquidated' notifications, symbol and side are present (the liquidated position's market and direction), pnlUsdCents/bigWin are ABSENT, actor is the liquidated trader, recipient is either a follower of that trader OR the trader themselves (self-notification), and actorName is the liquidated trader's cached display name. The recipient can mark their own notification read (partial update of just the 'read' field) and delete their own. $notificationId is a backend-generated unique id.",
+    "fields": {
+      "recipient": "Address",
+      "actor": "Address",
+      "actorName": "String?",
+      "type": "String",
+      "symbol": "String?",
+      "side": "String?",
+      "pnlUsdCents": "Int?",
+      "createdAt": "UInt",
+      "read": "Bool",
+      "bigWin": "Bool?"
+    },
+    "onchain": false,
+    "rules": {
+      "read": "@user.address == @data.recipient",
+      "create": "@user.address == @constants.PROJECT_VAULT_ADDRESS",
+      "update": "@user.address == @data.recipient",
+      "delete": "@user.address == @data.recipient || @user.address == @constants.PROJECT_VAULT_ADDRESS"
+    },
+    "operationDetails": {
+      "read": "Only the recipient (@user.address == @data.recipient). Notifications are private to the recipient.",
+      "create": "Backend only (@user.address == @constants.PROJECT_VAULT_ADDRESS). The Cloudflare Worker signs Tarobase requests as PROJECT_VAULT_ADDRESS, so backend fan-out resolves to this. Backend sets read=false on creation. type is 'open', 'close', 'follow', or 'liquidated'. For 'open'/'close' trade notifications: symbol is the market symbol, side is 'long' or 'short', pnlUsdCents is signed US cents present only for 'close' events (CAN BE NEGATIVE), and bigWin is an optional Bool flagging a 'close' whose realized PnL exceeds a highlight threshold. For 'follow' notifications: symbol, side, pnlUsdCents, and bigWin are ABSENT; actor is the new follower and recipient is the trader who was followed; actorName is the follower's cached display name. For 'liquidated' notifications: symbol and side are present (the liquidated position's market and direction), pnlUsdCents and bigWin are ABSENT, actor is the liquidated trader, recipient is either a follower of that trader OR the trader themselves (self-notification), and actorName is the liquidated trader's cached display name. createdAt is Unix seconds; actorName is optional cached display name.",
+      "update": "Only the recipient (@user.address == @data.recipient), used to flip 'read' to true via a partial update of just the 'read' field. Fields are intentionally NOT marked readonly (no '!') so a partial { read: true } update succeeds without re-sending recipient/actor/createdAt/bigWin. recipient/actor/createdAt/bigWin are conceptually immutable; the recipient has no UI to change them and the rule restricts updates to the recipient only.",
+      "delete": "The recipient (@user.address == @data.recipient) or the backend vault (@constants.PROJECT_VAULT_ADDRESS)."
+    }
+  },
+  "promotionLinkRegistry/$linkHash": {
+    "description": "Backend-managed registry mapping a normalized promotion-link hash ($linkHash = SHA-256 hex of the normalized link, computed by the backend) to the wallet that first submitted that link. Used as an anti-farming integrity gate so the same promotion link cannot be claimed by more than one wallet. Only the PROJECT_VAULT_ADDRESS backend writes/clears this registry; everyone can read.",
+    "fields": {
+      "link": "String",
+      "owner": "Address!",
+      "createdAt": "UInt!"
+    },
+    "onchain": false,
+    "rules": {
+      "read": "true",
+      "create": "@user.address == @constants.PROJECT_VAULT_ADDRESS",
+      "update": "@user.address == @constants.PROJECT_VAULT_ADDRESS",
+      "delete": "@user.address == @constants.PROJECT_VAULT_ADDRESS"
+    },
+    "operationDetails": {
+      "read": "Anyone can read. Exposes link, owner, and createdAt for the duplicate-link integrity check.",
+      "create": "Backend only. Only the PROJECT_VAULT_ADDRESS (the vault-signed Cloudflare Worker) may create a registry entry. $linkHash is the SHA-256 hex of the normalized link computed server-side; owner is the wallet that first submitted the link. Users cannot write this directly.",
+      "update": "Backend only. Only PROJECT_VAULT_ADDRESS may update a registry entry (e.g. to re-point or correct ownership). owner is readonly (Address!) and cannot be changed after creation.",
+      "delete": "Backend only. Only PROJECT_VAULT_ADDRESS may delete a registry entry (e.g. clearing a link so it can be reused)."
+    }
+  },
+  "positionSnapshots/$traderId": {
+    "description": "Internal backend-only state for the liquidation-detection Heartbeat task. Each tick the task overwrites this document with the trader's current open positions so the next tick can diff against it to detect liquidations. Keyed by the trader's wallet address ($traderId IS the trader's address). Written and read ONLY by the backend (signing as PROJECT_VAULT_ADDRESS). No hooks. Fields are intentionally NOT readonly so the per-tick overwrite (update) always succeeds.",
+    "fields": {
+      "trader": "Address",
+      "positions": "String",
+      "updatedAt": "UInt"
+    },
+    "onchain": false,
+    "rules": {
+      "read": "@user.address == @constants.PROJECT_VAULT_ADDRESS",
+      "create": "@user.address == @constants.PROJECT_VAULT_ADDRESS",
+      "update": "@user.address == @constants.PROJECT_VAULT_ADDRESS",
+      "delete": "@user.address == @constants.PROJECT_VAULT_ADDRESS"
+    },
+    "operationDetails": {
+      "read": "Backend only (@user.address == @constants.PROJECT_VAULT_ADDRESS). The Cloudflare Worker signs Tarobase requests as PROJECT_VAULT_ADDRESS, so the Heartbeat task can read the previous tick's snapshot. Internal state, not exposed to clients.",
+      "create": "Backend only (@user.address == @constants.PROJECT_VAULT_ADDRESS). On the first tick for a trader the Heartbeat task creates the snapshot. trader is the trader's wallet (equal to $traderId), positions is a JSON-serialized array/map of open positions (symbol, side, collateral in cents, size) opaque to the policy, updatedAt is Unix seconds.",
+      "update": "Backend only (@user.address == @constants.PROJECT_VAULT_ADDRESS). Each subsequent tick overwrites the document with the trader's current positions. Fields are NOT readonly so the overwrite succeeds.",
+      "delete": "Backend only (@user.address == @constants.PROJECT_VAULT_ADDRESS). Allows the backend to clean up snapshots for traders no longer tracked."
+    }
+  },
+  "liquidations/$liquidationId": {
+    "description": "A public-read record of a detected liquidation event, written ONLY by the backend (signing as PROJECT_VAULT_ADDRESS) from the liquidation-detection Heartbeat task. The frontend trades feed reads these to render a red 'Liquidated' marker. This is intentionally SEPARATE from phoenixTradeRecord because phoenixTradeRecord's offchain create hook awards trading points and a liquidation must NOT award points — so this collection has NO hooks. $liquidationId is a backend-generated unique id.",
+    "fields": {
+      "trader": "Address!",
+      "market": "Address?",
+      "symbol": "String!",
+      "side": "String!",
+      "sizeBaseLots": "UInt?",
+      "collateralCentsBefore": "Int?",
+      "createdAt": "UInt!"
+    },
+    "onchain": false,
+    "rules": {
+      "read": "true",
+      "create": "@user.address == @constants.PROJECT_VAULT_ADDRESS",
+      "update": "false",
+      "delete": "@user.address == @constants.PROJECT_VAULT_ADDRESS"
+    },
+    "operationDetails": {
+      "read": "Public (true). Anyone can read liquidation records so the frontend trades feed can render a red 'Liquidated' marker.",
+      "create": "Backend only (@user.address == @constants.PROJECT_VAULT_ADDRESS). The Cloudflare Worker signs Tarobase requests as PROJECT_VAULT_ADDRESS, so the Heartbeat task records detected liquidations. trader is the liquidated trader's wallet (readonly), symbol is the market symbol (e.g. 'SOL'), side is 'long' or 'short', createdAt is Unix seconds when the liquidation was detected. market (perp market address), sizeBaseLots (last-known position size), and collateralCentsBefore (collateral in US cents on the previous tick, can be negative) are optional. No hooks run — deliberately does NOT award trading points, unlike phoenixTradeRecord.",
+      "update": "Operation disallowed (false). Liquidation records are immutable once written.",
+      "delete": "Backend only (@user.address == @constants.PROJECT_VAULT_ADDRESS). Allows the backend to remove erroneous records."
+    }
+  },
+  "phoenixWins/$winId": {
+    "description": "Records profitable (winning) position closes for the public Arena Wins ticker. Written exclusively by the backend vault using a deterministic recordId (derived from txSignature + trader). Immutable once written.",
+    "fields": {
+      "trader": "Address!",
+      "symbol": "String!",
+      "market": "Address!",
+      "pnlUsdCents": "Int!",
+      "createdAt": "Int!"
+    },
+    "onchain": false,
+    "rules": {
+      "read": "true",
+      "create": "@user.address == @constants.PROJECT_VAULT_ADDRESS",
+      "update": "false",
+      "delete": "@user.address == @constants.PROJECT_VAULT_ADDRESS"
+    },
+    "operationDetails": {
+      "read": "Public. Anyone can read all fields; powers the live Arena Wins ticker.",
+      "create": "Backend vault only. @user.address must equal @constants.PROJECT_VAULT_ADDRESS (the Cloudflare Worker signs Tarobase requests as the vault). Document key is a deterministic recordId computed by the backend from txSignature + trader, so no auto-id. pnlUsdCents is only ever written when > 0 (enforced by the backend, not the rule).",
+      "update": "Disallowed. Wins are immutable once written.",
+      "delete": "Backend vault only (moderation/cleanup). Normal users cannot delete."
+    }
+  },
+  "monthlyRewardDeposit/$depositId": {
+    "description": "Admin deposits one token into a given calendar month's prize pot PDA. ONCHAIN passthrough — each deposit is its own immutable record; the onchain hook creates/keys a PDA by potAccountId and transfers the token INTO it. Admin may deposit multiple times and multiple distinct tokens into the same month (same potAccountId). Frontend builds $depositId as '{potAccountId}_{timestamp}' (underscores only). monthKey uses UNDERSCORE format e.g. '2026_06'. potAccountId is deterministic from monthKey e.g. 'monthlyPot_2026_06' (alphanumeric + underscore only — safe as an AccountPlugin account id). mint = @constants.SOL for native test-SOL, or any SPL mint address. amount is in that token's base units (lamports for SOL, micro-units for SPL).",
+    "fields": {
+      "monthKey": "String!",
+      "potAccountId": "String!",
+      "mint": "Address!",
+      "amount": "UInt!",
+      "depositor": "Address!",
+      "createdAt": "UInt!"
+    },
+    "onchain": true,
+    "isPassthrough": true,
+    "rules": {
+      "read": "true",
+      "create": "@user.address == @constants.ADMIN_ADDRESS && @newData.depositor == @user.address && @newData.amount > 0"
+    },
+    "hooks": {
+      "onchain": {
+        "create": "@AccountPlugin.createAccount(@newData.potAccountId) && @TokenPlugin.transfer(@user.address, @newData.potAccountId, @newData.mint, @newData.amount)"
+      }
+    },
+    "operationDetails": {
+      "read": "Public (onchain). Anyone can read deposit records. UI sums deposits by potAccountId+mint to show the current pot composition per month.",
+      "create": "Admin-only (@constants.ADMIN_ADDRESS). depositor must equal the caller, amount > 0. Onchain hook: (1) @AccountPlugin.createAccount(@newData.potAccountId) idempotently derives/creates the PDA vault keyed by potAccountId (deterministic from monthKey). (2) @TokenPlugin.transfer moves `amount` base units of `mint` from the admin into that PDA. Pass @constants.SOL as mint for native test-SOL deposits. Multiple deposits (different mints / repeated) accumulate in the SAME PDA because potAccountId is identical across a month. CAP: keep distinct mints per month <= MONTHLY_REWARD_MAX_TOKENS (5) — enforced off-policy by the deposit UI so the fixed-slot finalization can represent every token.",
+      "update": "Operation disallowed. Passthrough records are immutable.",
+      "delete": "Operation disallowed. Passthrough records cannot be deleted."
+    },
+    "queries": {
+      "getPotVaultAddress": {
+        "returnType": "String",
+        "query": "@AccountPlugin.getAccountAddress(@newData.potAccountId)"
+      }
+    }
+  },
+  "monthlyRewardWinners/$monthKey": {
+    "description": "OFFCHAIN. Backend Heartbeat writes ONE doc per finalized month (document id = monthKey, e.g. '2026_06'). Snapshot of the finalized result for display: the 3 winner addresses and the pot composition at finalization (up to 5 token slots, each with mint + total base-unit amount in the pot). The per-winner split amounts that actually authorize on-chain payouts live in monthlyRewardAllotment (onchain), because onchain claim hooks cannot read this offchain doc.",
+    "fields": {
+      "monthKey": "String!",
+      "potAccountId": "String!",
+      "winner1": "Address!",
+      "winner2": "Address!",
+      "winner3": "Address!",
+      "tokenCount": "UInt!",
+      "mint1": "Address?",
+      "total1": "UInt?",
+      "mint2": "Address?",
+      "total2": "UInt?",
+      "mint3": "Address?",
+      "total3": "UInt?",
+      "mint4": "Address?",
+      "total4": "UInt?",
+      "mint5": "Address?",
+      "total5": "UInt?",
+      "finalizedAt": "UInt!"
+    },
+    "onchain": false,
+    "rules": {
+      "read": "true",
+      "create": "@user.address == @constants.PROJECT_VAULT_ADDRESS",
+      "update": "@user.address == @constants.PROJECT_VAULT_ADDRESS",
+      "delete": "@user.address == @constants.PROJECT_VAULT_ADDRESS"
+    },
+    "operationDetails": {
+      "read": "Public. Anyone can read the finalized monthly results and pot composition for display.",
+      "create": "Backend Heartbeat only (PROJECT_VAULT_ADDRESS). Written once when a month is finalized. Stores the 3 winner wallets, potAccountId, tokenCount (1..5), and up to 5 (mint, total) pairs describing the pot at finalization. totalN base units are the FULL pot amount for slot N (not yet split). Display-only; authorization for payout lives in monthlyRewardAllotment.",
+      "update": "Backend only (PROJECT_VAULT_ADDRESS). Allows correcting a finalization snapshot before claims are processed.",
+      "delete": "Backend only (PROJECT_VAULT_ADDRESS). For cleanup of test/erroneous finalizations."
+    }
+  },
+  "monthlyRewardAllotment/$allotmentId": {
+    "description": "ONCHAIN. The per-winner authorization + single-tx multi-token claim record. The backend Heartbeat PRE-CREATES one doc per winner at finalization (gated to PROJECT_VAULT_ADDRESS), baking in: the winner address, the rank, the potAccountId (the PDA to pay FROM), and the EXACT per-token amounts owed to THIS winner across up to 5 fixed slots (mint1..mint5 + amt1..amt5, already rank-split, e.g. rank1 = 50% of each token's pot). claimed starts false. THE WINNER THEN CLAIMS by UPDATING this same doc (claimed false->true) — this is the single winner-signed transaction. Because the doc was pre-created with the amounts, the onchain update rule/hook reads @data (no offchain cross-read needed): it requires @user.address == @data.winner and !@data.claimed (exactly-once), charges the flat 0.01 test-SOL fee from the winner to REWARD_FEE_WALLET, and transfers every populated token slot from the pot PDA to the winner — all atomically in ONE approval. Frontend builds $allotmentId as '{potAccountId}_{rank}' e.g. 'monthlyPot_2026_06_1' (winner address NOT used as id since it could collide with PDA-id rules; rank disambiguates the 3 winners). Empty slots are no-ops (amtN == 0) guarded so they never abort the transfer chain.",
+    "fields": {
+      "monthKey": "String!",
+      "potAccountId": "String!",
+      "rank": "UInt!",
+      "winner": "Address!",
+      "claimed": "Bool",
+      "mint1": "Address?",
+      "amt1": "UInt",
+      "mint2": "Address?",
+      "amt2": "UInt",
+      "mint3": "Address?",
+      "amt3": "UInt",
+      "mint4": "Address?",
+      "amt4": "UInt",
+      "mint5": "Address?",
+      "amt5": "UInt"
+    },
+    "onchain": true,
+    "rules": {
+      "read": "true",
+      "create": "@user.address == @constants.PROJECT_VAULT_ADDRESS && @newData.claimed == false && @newData.rank >= 1 && @newData.rank <= 3",
+      "update": "@user.address == @data.winner && @data.claimed == false && @newData.claimed == true && @newData.winner == @data.winner && @newData.potAccountId == @data.potAccountId && @newData.amt1 == @data.amt1 && @newData.amt2 == @data.amt2 && @newData.amt3 == @data.amt3 && @newData.amt4 == @data.amt4 && @newData.amt5 == @data.amt5",
+      "delete": "false"
+    },
+    "hooks": {
+      "onchain": {
+        "update": "@TokenPlugin.transfer(@user.address, @constants.REWARD_FEE_WALLET, @constants.SOL, @constants.MONTHLY_REWARD_CLAIM_FEE_LAMPORTS) && ((@data.amt1 > 0 && @TokenPlugin.transfer(@data.potAccountId, @data.winner, @data.mint1, @data.amt1)) || @data.amt1 == 0) && ((@data.amt2 > 0 && @TokenPlugin.transfer(@data.potAccountId, @data.winner, @data.mint2, @data.amt2)) || @data.amt2 == 0) && ((@data.amt3 > 0 && @TokenPlugin.transfer(@data.potAccountId, @data.winner, @data.mint3, @data.amt3)) || @data.amt3 == 0) && ((@data.amt4 > 0 && @TokenPlugin.transfer(@data.potAccountId, @data.winner, @data.mint4, @data.amt4)) || @data.amt4 == 0) && ((@data.amt5 > 0 && @TokenPlugin.transfer(@data.potAccountId, @data.winner, @data.mint5, @data.amt5)) || @data.amt5 == 0)"
+      }
+    },
+    "operationDetails": {
+      "read": "Public (onchain). Anyone can read allotment/claim records. A winner's frontend reads their own doc at '{potAccountId}_{rank}' to show what's claimable.",
+      "create": "Backend Heartbeat only (PROJECT_VAULT_ADDRESS). At finalization the backend creates 3 docs (one per rank). It bakes the rank-split per-token amounts directly into amt1..amt5 (rank1 = 50% of each pot token, rank2 = 35%, rank3 = 15%, using multiply-before-divide integer math, e.g. (totalN * 5000)//10000). mintN must match the pot's deposited mints; set amtN = 0 (and mintN may be omitted) for unused slots. claimed must be false; rank in 1..3. potAccountId is the PDA the payout transfers FROM.",
+      "update": "Winner-signed claim — the ONE transaction. Caller must equal @data.winner and the doc must be unclaimed (@data.claimed == false). The update may ONLY flip claimed false->true; winner, potAccountId and every amtN are required to be unchanged (prevents tampering with the baked amounts). Onchain hook (atomic, single approval): (1) transfers the flat MONTHLY_REWARD_CLAIM_FEE_LAMPORTS (0.01 test-SOL) from the WINNER (@user.address, who signs) to @constants.REWARD_FEE_WALLET; (2) for each of the 5 slots, if amtN > 0 transfers amtN of mintN from the pot PDA (@data.potAccountId — the program signs for it) to @data.winner, and if amtN == 0 it is a safe no-op that does not abort the chain. All transfers succeed-or-roll-back together. Setting claimed=true in the same update guarantees exactly-once (a second update fails the @data.claimed == false guard). Frontend must send a FULL update preserving winner/potAccountId/amtN unchanged and only setting claimed=true.",
+      "delete": "Operation disallowed. Allotment/claim records are permanent for audit and double-claim protection."
+    },
+    "queries": {
+      "getPotVaultAddress": {
+        "returnType": "String",
+        "query": "@AccountPlugin.getAccountAddress(@data.potAccountId)"
+      }
+    }
+  },
+  "monthlyRewardWithdrawal/$withdrawalId": {
+    "description": "ONCHAIN passthrough. Admin-only WITHDRAW that pulls a token back OUT of the CURRENT, not-yet-finalized month's prize pot PDA (per-token, partial or full) — to fix a wrong-amount or wrong-token deposit. Reverse of monthlyRewardDeposit. The onchain hook transfers `amount` base units of `mint` FROM the pot PDA (potAccountId) back to the admin caller; the program signs for the PDA exactly like the allotment payout. Does NOT call createAccount — the PDA already exists from prior deposits. NOT-FINALIZED GUARD (enforced on-chain): the create rule reads the rank-1 allotment doc for this month and requires it to NOT exist yet (the backend Heartbeat creates monthlyRewardAllotment/{potAccountId}_1 at finalization). The rank-1 allotment id is supplied by the frontend as rank1AllotmentId so the guard uses the proven get(/coll/@newData.field) path-interpolation form (avoids the +-concat-as-arithmetic path bug). monthKey UNDERSCORE format e.g. '2026_06'. potAccountId deterministic e.g. 'monthlyPot_2026_06' (alphanumeric + underscore only). rank1AllotmentId MUST equal '{potAccountId}_1' e.g. 'monthlyPot_2026_06_1'. Frontend builds $withdrawalId as '{potAccountId}_{unixSecs}' (underscores only). amount in the token's base units (lamports for SOL, micro-units for SPL).",
+    "fields": {
+      "monthKey": "String!",
+      "potAccountId": "String!",
+      "mint": "Address!",
+      "amount": "UInt!",
+      "rank1AllotmentId": "String!",
+      "createdAt": "UInt!"
+    },
+    "onchain": true,
+    "isPassthrough": true,
+    "rules": {
+      "read": "true",
+      "create": "@user.address == @constants.ADMIN_ADDRESS && @newData.amount > 0 && @newData.rank1AllotmentId == @newData.potAccountId + '_1' && get(/monthlyRewardAllotment/@newData.rank1AllotmentId) == null",
+      "update": "false",
+      "delete": "false"
+    },
+    "hooks": {
+      "onchain": {
+        "create": "@TokenPlugin.transfer(@newData.potAccountId, @user.address, @newData.mint, @newData.amount)"
+      }
+    },
+    "operationDetails": {
+      "read": "Public (onchain). Anyone can read withdrawal records (audit trail of admin pot corrections).",
+      "create": "Admin-only (@constants.ADMIN_ADDRESS). amount > 0. NOT-FINALIZED GUARD: rank1AllotmentId must equal potAccountId + '_1', and the onchain rule reads get(/monthlyRewardAllotment/{rank1AllotmentId}) and requires it to be null — i.e. the month has NOT been finalized yet (the Heartbeat pre-creates the rank-1 allotment at finalization). This blocks any withdrawal once winners are locked. Onchain hook (atomic): @TokenPlugin.transfer moves `amount` base units of `mint` FROM the pot PDA (@newData.potAccountId — the program signs for it, same mechanism as the allotment payout) back to the admin caller (@user.address). Does NOT createAccount; the PDA already exists from prior deposits. Withdrawing more than the PDA holds for that mint will fail the transfer and roll back the whole tx. Pass @constants.SOL as mint for native test-SOL.",
+      "update": "Operation disallowed. Passthrough withdrawal records are immutable.",
+      "delete": "Operation disallowed. Passthrough withdrawal records cannot be deleted."
+    },
+    "queries": {
+      "getPotVaultAddress": {
+        "returnType": "String",
+        "query": "@AccountPlugin.getAccountAddress(@newData.potAccountId)"
+      },
+      "getPotTokenBalance": {
+        "returnType": "UInt",
+        "query": "@TokenPlugin.getBalance(@AccountPlugin.getAccountAddress(@newData.potAccountId), @newData.mint)"
+      }
+    }
+  }
+}

@@ -1,0 +1,352 @@
+/*
+ * V3 Base Styles
+ * Font loading is handled by the theme system at runtime.
+ */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  /* ── Locked app shell (kills iOS rubber-band overscroll) ──────────────────
+   * The document itself NEVER scrolls. `html`, `body` and `#root` are pinned to
+   * the full viewport height with `overflow: hidden`, so there is no document
+   * scroll to rubber-band: the page can no longer bounce upward past the top
+   * (which previously dragged the sticky AEONIAN header out of view) or past the
+   * bottom. All real scrolling happens inside a single inner region (`#app-main`,
+   * see below). The top header (`position: sticky`) and the bottom nav
+   * (`position: fixed`) live in this fixed shell, so they are physically locked
+   * in place and cannot move. */
+  html,
+  body {
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+    touch-action: pan-x pan-y;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: system-ui, sans-serif;
+    position: fixed;
+    inset: 0;
+  }
+
+  #root {
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+
+  .chart-touch-zone {
+    touch-action: auto;
+  }
+
+  /* iOS Safari auto-zooms (and shifts the layout) when a focused form field has
+   * a computed font-size below 16px. Force every text-entry control to >=16px on
+   * touch devices so tapping into ANY field never triggers that zoom-in.
+   * NOTE: `!important` is required — shadcn/ui inputs apply Tailwind `text-sm`
+   * (14px) utilities whose specificity beats a bare base-layer element selector,
+   * so without it the field still computes to 14px and iOS zooms anyway. */
+  @media (max-width: 768px) {
+    input:not([type='checkbox']):not([type='radio']):not([type='range']),
+    textarea,
+    select,
+    [contenteditable] {
+      font-size: 16px !important;
+    }
+  }
+
+  /* The ONE scroll region for the whole app. The sticky header pins to its top
+   * and the fixed bottom nav floats over its bottom. `overscroll-behavior: none`
+   * reliably stops the elastic bounce here (unlike on the document body in iOS
+   * standalone/PWA), and also prevents scroll-chaining so nested scroll areas
+   * (Positions/Orders lists, the market dropdown) keep working normally. */
+  #app-main {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: none;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* ── Animated mesh gradient background ── */
+.animated-mesh-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background: hsl(270 60% 6%);
+}
+
+.animated-mesh-bg::before,
+.animated-mesh-bg::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(100px);
+  opacity: 0.35;
+  animation: meshFloat 20s ease-in-out infinite;
+}
+
+.animated-mesh-bg::before {
+  width: 60vw;
+  height: 60vw;
+  background: radial-gradient(circle, hsl(270 70% 45% / 0.5) 0%, transparent 70%);
+  top: -20%;
+  left: -10%;
+  animation-delay: 0s;
+}
+
+.animated-mesh-bg::after {
+  width: 50vw;
+  height: 50vw;
+  background: radial-gradient(circle, hsl(285 60% 35% / 0.4) 0%, transparent 70%);
+  bottom: -15%;
+  right: -10%;
+  animation-delay: -10s;
+  animation-duration: 25s;
+}
+
+@keyframes meshFloat {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(5%, 8%) scale(1.05); }
+  66% { transform: translate(-3%, 4%) scale(0.95); }
+}
+
+/* ── Glass morphism utilities ── */
+.glass {
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.035);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.glass-card-strong {
+  background: rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.glass-header {
+  background: rgba(10, 12, 22, 0.7);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-footer {
+  background: rgba(10, 12, 22, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-button {
+  background: rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  transition: all 0.2s ease;
+}
+
+.glass-button:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.18);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.glass-section {
+  background: rgba(255, 255, 255, 0.025);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.glass-input {
+  background: rgba(0, 0, 0, 0.25);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #fff;
+  transition: all 0.2s ease;
+}
+
+.glass-input:focus {
+  border-color: hsl(270 70% 58% / 0.5);
+  box-shadow: 0 0 0 2px hsl(270 70% 58% / 0.15);
+  outline: none;
+}
+
+.glass-inner {
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.glass-dialog {
+  background: rgba(12, 14, 26, 0.92);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
+}
+
+/* ── Background pattern utilities ── */
+.bg-grid-pattern {
+  background-image:
+    linear-gradient(hsl(var(--border) / 0.3) 1px, transparent 1px),
+    linear-gradient(90deg, hsl(var(--border) / 0.3) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+.bg-dot-pattern {
+  background-image: radial-gradient(circle, hsl(var(--border) / 0.4) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.bg-noise {
+  position: relative;
+}
+.bg-noise::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0.03;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 256px 256px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.bg-gradient-radial {
+  background: radial-gradient(ellipse at top, hsl(var(--primary) / 0.08) 0%, transparent 60%);
+}
+
+.bg-gradient-spotlight {
+  background: radial-gradient(circle at 30% 20%, hsl(var(--primary) / 0.12) 0%, transparent 50%),
+              radial-gradient(circle at 70% 80%, hsl(var(--accent) / 0.08) 0%, transparent 50%);
+}
+
+/* ── Stagger delay utilities (use with animate-* classes) ── */
+.delay-1 { animation-delay: 75ms; }
+.delay-2 { animation-delay: 150ms; }
+.delay-3 { animation-delay: 225ms; }
+.delay-4 { animation-delay: 300ms; }
+.delay-5 { animation-delay: 375ms; }
+.delay-6 { animation-delay: 450ms; }
+
+/* ── Typography utilities ── */
+.text-display {
+  font-size: clamp(2.5rem, 5vw + 1rem, 4.5rem);
+  line-height: 1.05;
+  letter-spacing: -0.025em;
+  font-weight: 700;
+  text-wrap: balance;
+}
+
+.text-headline {
+  font-size: clamp(1.75rem, 3vw + 0.5rem, 3rem);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  font-weight: 700;
+  text-wrap: balance;
+}
+
+.text-subhead {
+  font-size: clamp(1.125rem, 1.5vw + 0.5rem, 1.5rem);
+  line-height: 1.4;
+  letter-spacing: -0.01em;
+  color: hsl(var(--muted-foreground));
+}
+
+.text-overline {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: hsl(var(--primary));
+}
+
+/* ── Divider utilities ── */
+.divider-gradient {
+  height: 1px;
+  background: linear-gradient(to right, transparent, hsl(var(--border) / 0.6), transparent);
+}
+
+.divider-glow {
+  height: 1px;
+  background: linear-gradient(to right, transparent, hsl(var(--primary) / 0.4), transparent);
+}
+
+/* ── Shimmer skeleton animation ── */
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ── Collapsible section animations (Radix Collapsible) ── */
+@keyframes collapsible-down {
+  from { height: 0; opacity: 0; }
+  to { height: var(--radix-collapsible-content-height); opacity: 1; }
+}
+@keyframes collapsible-up {
+  from { height: var(--radix-collapsible-content-height); opacity: 1; }
+  to { height: 0; opacity: 0; }
+}
+[data-state='open'] > .collapsible-content {
+  animation: collapsible-down 0.22s ease-out;
+}
+[data-state='closed'] > .collapsible-content {
+  animation: collapsible-up 0.18s ease-in;
+}
+
+/* ── Market selector chevron hint (gentle float when dropdown is closed) ── */
+@keyframes marketChevronFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(3px); }
+}
+.market-chevron-hint {
+  animation: marketChevronFloat 2.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .market-chevron-hint { animation: none; }
+}
+
+/* ── Collapsed panel chevron hint (gentle bob while rotated, invites expand) ── */
+@keyframes panelChevronFloat {
+  0%, 100% { transform: rotate(0deg) translateY(0); }
+  50% { transform: rotate(0deg) translateY(3px); }
+}
+.panel-chevron-hint {
+  animation: panelChevronFloat 1.8s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .panel-chevron-hint { animation: none; }
+}
+
+/* ── Gradient text utility ── */
+.gradient-text {
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-image: linear-gradient(to right, hsl(var(--primary)), hsl(var(--accent)), hsl(var(--primary)));
+}

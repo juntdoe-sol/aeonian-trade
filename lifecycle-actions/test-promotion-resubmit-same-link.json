@@ -1,0 +1,27 @@
+{
+  "version": "1",
+  "name": "Promotion resubmit with SAME link (isolates whether link immutability is the failure cause)",
+  "actors": {
+    "User": "91d9zpdo6X33H6kBkFQzYpRWmAZxEV2zhUnrjidtmFCW"
+  },
+  "steps": [
+    { "op": "as", "who": "User" },
+    { "op": "set", "path": "promotionClaims/$User", "data": {
+      "userAddress": "$User",
+      "link": "https://x.com/aeonian/status/123",
+      "status": "pending",
+      "pointsAwarded": 1000,
+      "createdAt": "@time.now",
+      "updatedAt": "@time.now"
+    } },
+    { "op": "expect", "expr": "get(/promotionClaims/$User).status == 'pending'" },
+
+    { "op": "as", "who": "User" },
+    { "op": "set", "path": "promotionClaims/$User", "data": {
+      "link": "https://x.com/aeonian/status/123",
+      "status": "pending",
+      "updatedAt": "@time.now"
+    } },
+    { "op": "expect", "expr": "get(/promotionClaims/$User).status == 'pending'" }
+  ]
+}

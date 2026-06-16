@@ -1,0 +1,100 @@
+{
+  "version": "1",
+  "kind": "bootstrap",
+  "scope": "mock-battle",
+  "executionTarget": "server",
+  "description": "Seed a mock active battle with participants and messages",
+  "targetEnvironments": ["mock"],
+  "bootstrapType": "seed-data",
+  "actors": {
+    "challenger": "73bqpUQaxxHA1sh2mPFgQbxaSdXoTitWh4wboTU2oDce",
+    "opponent": "3LbF6kuqEXaWCdf72iaqtWcWhxQtWG9y2PPqAMPnGBM6"
+  },
+  "steps": [
+    {
+      "op": "set",
+      "path": "battles/mock-active-001",
+      "data": {
+        "challenger": "73bqpUQaxxHA1sh2mPFgQbxaSdXoTitWh4wboTU2oDce",
+        "opponent": "3LbF6kuqEXaWCdf72iaqtWcWhxQtWG9y2PPqAMPnGBM6",
+        "betAmountMicro": 5000000,
+        "startTime": 1748439600,
+        "endTime": 1748443200,
+        "durationSeconds": 3600,
+        "status": "active",
+        "challengerXHandle": "trader_chad",
+        "opponentXHandle": "whale_bob",
+        "winner": null,
+        "createdAt": 1748439000
+      }
+    },
+    {
+      "op": "as",
+      "who": "challenger"
+    },
+    {
+      "op": "set",
+      "path": "battleParticipants/mock-active-001_73bqpUQaxxHA1sh2mPFgQbxaSdXoTitWh4wboTU2oDce",
+      "data": {
+        "battleId": "mock-active-001",
+        "wallet": "73bqpUQaxxHA1sh2mPFgQbxaSdXoTitWh4wboTU2oDce",
+        "xHandle": "trader_chad",
+        "betAmountMicro": 5000000,
+        "equityAtStartMicro": 50000000000,
+        "joinedAt": 1748439600
+      }
+    },
+    {
+      "op": "setMany",
+      "writes": [
+        {
+          "path": "battleMessages/msg-001",
+          "data": {
+            "battleId": "mock-active-001",
+            "senderAddress": "73bqpUQaxxHA1sh2mPFgQbxaSdXoTitWh4wboTU2oDce",
+            "text": "you're going down whale_bob",
+            "emoji": "\ud83d\udd25",
+            "createdAt": 1748440200
+          }
+        },
+        {
+          "path": "battleMessages/msg-003",
+          "data": {
+            "battleId": "mock-active-001",
+            "senderAddress": "73bqpUQaxxHA1sh2mPFgQbxaSdXoTitWh4wboTU2oDce",
+            "text": "size doesn't matter when you're leverage long on doge",
+            "emoji": "\ud83d\udcc8",
+            "createdAt": 1748441400
+          }
+        }
+      ]
+    },
+    {
+      "op": "as",
+      "who": "opponent"
+    },
+    {
+      "op": "set",
+      "path": "battleParticipants/mock-active-001_3LbF6kuqEXaWCdf72iaqtWcWhxQtWG9y2PPqAMPnGBM6",
+      "data": {
+        "battleId": "mock-active-001",
+        "wallet": "3LbF6kuqEXaWCdf72iaqtWcWhxQtWG9y2PPqAMPnGBM6",
+        "xHandle": "whale_bob",
+        "betAmountMicro": 5000000,
+        "equityAtStartMicro": 100000000000,
+        "joinedAt": 1748439620
+      }
+    },
+    {
+      "op": "set",
+      "path": "battleMessages/msg-002",
+      "data": {
+        "battleId": "mock-active-001",
+        "senderAddress": "3LbF6kuqEXaWCdf72iaqtWcWhxQtWG9y2PPqAMPnGBM6",
+        "text": "lol my equity is 2x yours, good luck",
+        "emoji": "\ud83d\udc80",
+        "createdAt": 1748440800
+      }
+    }
+  ]
+}

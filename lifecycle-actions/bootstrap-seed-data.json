@@ -1,0 +1,35 @@
+{
+  "version": "1",
+  "kind": "bootstrap",
+  "scope": "seed-data",
+  "executionTarget": "server",
+  "description": "Seed one directed battle challenge targeting @vitalikbuterin, status pending",
+  "targetEnvironments": ["mock"],
+  "bootstrapType": "seed-data",
+  "clearFirst": true,
+  "actors": {
+    "challenger": "CwmWfrJpMtLXWyRxTiy5hmhwUVGtzGTuL9mHxaaGmQRB"
+  },
+  "steps": [
+    { "op": "as", "who": "challenger" },
+    {
+      "op": "setMany",
+      "writes": [
+        {
+          "path": "battles/directed_battle_001",
+          "data": {
+            "challenger": "$challenger",
+            "opponent": null,
+            "betAmountMicro": 10000000,
+            "durationSeconds": 86400,
+            "status": "pending",
+            "challengerXHandle": "cryptowarrior88",
+            "opponentXHandle": "vitalikbuterin",
+            "winner": null,
+            "createdAt": 1748390400
+          }
+        }
+      ]
+    }
+  ]
+}

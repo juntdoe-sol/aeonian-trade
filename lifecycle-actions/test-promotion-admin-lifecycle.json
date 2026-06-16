@@ -1,0 +1,38 @@
+{
+  "version": "1",
+  "name": "Promotion claim full lifecycle: create -> admin approve (points hook) -> user resubmit (approved->pending no-op)",
+  "actors": {
+    "User": "Cb7JzNzjhQi7okQTtufozXc29bof5KssvmATcgNpgdqv",
+    "Admin": "@constants.ADMIN_ADDRESS"
+  },
+  "steps": [
+    { "op": "as", "who": "User" },
+    { "op": "set", "path": "promotionClaims/$User", "data": {
+      "userAddress": "$User",
+      "link": "https://x.com/aeonian/status/789",
+      "status": "pending",
+      "pointsAwarded": 1000,
+      "createdAt": "@time.now",
+      "updatedAt": "@time.now"
+    } },
+    { "op": "expect", "expr": "get(/promotionClaims/$User).status == 'pending'" },
+
+    { "op": "as", "who": "Admin" },
+    { "op": "set", "path": "promotionClaims/$User", "data": {
+      "status": "approved",
+      "updatedAt": "@time.now"
+    } },
+    { "op": "expect", "expr": "get(/promotionClaims/$User).status == 'approved'" },
+    { "op": "expect", "expr": "get(/userPoints/Cb7JzNzjhQi7okQTtufozXc29bof5KssvmATcgNpgdqv).socialPoints == 1000" },
+
+    { "op": "as", "who": "User" },
+    { "op": "set", "path": "promotionClaims/$User", "data": {
+      "link": "https://x.com/aeonian/status/999",
+      "status": "pending",
+      "updatedAt": "@time.now"
+    } },
+    { "op": "expect", "expr": "get(/promotionClaims/$User).status == 'pending'" },
+    { "op": "expect", "expr": "get(/promotionClaims/$User).link == 'https://x.com/aeonian/status/999'" },
+    { "op": "expect", "expr": "get(/userPoints/Cb7JzNzjhQi7okQTtufozXc29bof5KssvmATcgNpgdqv).socialPoints == 1000" }
+  ]
+}

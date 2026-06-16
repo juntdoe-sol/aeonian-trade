@@ -1,0 +1,32 @@
+{
+  "version": "1",
+  "name": "Open ONE isolated-margin Phoenix position on subaccount 1 and LEAVE IT OPEN for backend read-route inspection",
+  "actors": {
+    "Trader": "GQPHQfsYCzwsQNaEsRhTGtpke9PRYVmNTxotXs3G2aY7"
+  },
+  "steps": [
+    { "op": "as", "who": "Trader" },
+    { "op": "fund", "account": "$Trader", "amount": 5.0 },
+    { "op": "fund", "account": "$Trader", "amount": 1000, "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" },
+
+    { "op": "set", "path": "phoenixTrader/$Trader", "data": {} },
+
+    { "op": "set", "path": "phoenixDeposit/d1", "data": { "amt": 200000000 } },
+
+    { "op": "set", "path": "phoenixIsoTrade/open1", "data": {
+      "trader": "$Trader",
+      "market": "71Si24E4uc3oCaPbPZTozC1ptSNNqygjjebxSmErSsC2",
+      "symbol": "SOL",
+      "side": "long",
+      "sizeBaseLots": 100,
+      "leverage": 2,
+      "subaccountIndex": 1,
+      "transferAmt": 100000000,
+      "sizeUsd": 100
+    } },
+    { "op": "expect", "expr": "get(/phoenixIsoTrade/open1) != null" },
+
+    { "op": "expect", "expr": "get(/phoenixIsoTrade/open1).subaccountIndex == 1" },
+    { "op": "expect", "expr": "get(/phoenixIsoTrade/open1).side == 'long'" }
+  ]
+}
