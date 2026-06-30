@@ -18,11 +18,21 @@ Most DEX interfaces are utilitarian dashboards. Aeonian layers competitive, soci
 
 ## Features
 
+### Discovery Hub
+- **Front page dashboard** — 4-column layout (desktop) / single-column (mobile)
+- Live markets table with all tradable perps
+- Portfolio summary panel with positions, activity, and follows feed
+- PnL leaderboard + Hall of Fame embedded in the hub
+- Trading news feed and community market analysis
+
 ### Trade
 - Perpetual futures on Solana — long/short with up to 15x leverage
 - Cross-margin and Isolated margin modes
 - Market and limit orders with Take Profit / Stop Loss
-- Real-time price charts, orderbook, and live position tracking
+- **TradingView Advanced Chart** — full-featured chart with indicators, timeframes, and symbol switching
+- Real-time orderbook and live position tracking
+- **Position Management Sheet** — bottom sheet for adjusting TP/SL, closing partials, and managing open positions
+- **Mobile Order Sheet** — touch-optimized order entry for mobile
 - Multi-market symbol picker (crypto, commodities) with favorites
 - Isolated Sweep — auto-sweep isolated profits back to cross margin
 
@@ -31,8 +41,14 @@ Most DEX interfaces are utilitarian dashboards. Aeonian layers competitive, soci
 - **Royal Rumble** — multi-player entry-fee competition; top 3 by PnL% split the prize pot
 - **Monthly Leaderboard** — rolling Daily / Weekly / Monthly / All-Time PnL rankings
 - **Monthly Prize Pot** — community pool paid out to top performers (50% / 35% / 15%)
+- **Warrior Avatars** — rank-colored gold/silver/bronze arena avatars for leaderboard
 - In-battle trash talk, spectators, live countdown, and shareable result cards
 - Hall of Fame — historical archive of monthly prize pot winners
+
+### Community & Analysis
+- **Market Analysis feed** — post and read technical analysis writeups; vote and comment on each analysis
+- **Articles** — in-app trading content (INTERN vs MARKET series and more)
+- **Trading News feed** — live crypto news embedded in the Discovery hub
 
 ### Portfolio
 - Full portfolio view: collateral, unrealized PnL, available cash, funding costs
@@ -49,7 +65,14 @@ Most DEX interfaces are utilitarian dashboards. Aeonian layers competitive, soci
 ### Social / Identity
 - Link your X/Twitter account to your Solana wallet
 - X handle and avatar shown across battles, leaderboards, and profiles
+- Default warrior avatars for users without linked X accounts
 - Follow other traders, in-app notifications, live wins ticker
+
+### Experience
+- **Celebration effects** — coin rain burst, rocket launch overlay, and win animations
+- **Haptic feedback** — native haptics on mobile for order fills and battle events
+- **Sound effects** — audio feedback for key actions
+- **In-app ads** — video and image ad carousel with admin management panel
 
 ---
 
@@ -58,6 +81,7 @@ Most DEX interfaces are utilitarian dashboards. Aeonian layers competitive, soci
 | Layer | Technology |
 |---|---|
 | Frontend | React + Vite + TypeScript, Tailwind CSS, shadcn/ui |
+| Charts | TradingView Advanced Chart widget |
 | Backend | Hono on Cloudflare Workers |
 | Database | Tarobase (real-time subscriptions) |
 | Auth | Solana wallet (Phantom / Privy embedded wallet) + AWS Cognito JWT |
@@ -73,11 +97,12 @@ Mobile App (React/Vite PWA → Android APK)
         │
         ├── Solana Perps SDK   ──► Solana mainnet (on-chain trades, positions)
         ├── Jupiter API        ──► Token swaps
+        ├── TradingView        ──► Advanced charting
         ├── Privy / Phantom    ──► Wallet auth
         │
         └── Hono API (Cloudflare Workers)
                 │
-                ├── Tarobase (real-time DB — leaderboards, battles, rewards)
+                ├── Tarobase (real-time DB — leaderboards, battles, rewards, analysis)
                 ├── AWS Cognito (JWT auth)
                 └── Battle settlement (USDC wager escrow + on-chain payout)
 ```
