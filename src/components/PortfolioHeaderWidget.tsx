@@ -30,17 +30,22 @@ import { errorToast } from '@/utils/toast-helpers';
 import { useGeoBlocked } from '@/hooks/use-geo-blocked';
 import { phoenixDeposit, phoenixWithdraw } from '@/utils/phoenix-client';
 import { formatUsd } from './trading/types';
+import { toNumber, type RisePosition, type TokenAmount } from '@/utils/phoenix-mappers';
 
-// ─── Trader data shape from Phoenix /v1/traders/:authority ───────────────────
+// ─── Trader data shape from /api/phoenix/trader/:authority ───────────────────
+// The endpoint returns TokenAmount-wrapped fields (value/decimals/ui). Read them
+// with toNumber, exactly like PortfolioPage does, so freeCollateral is computed
+// from real fields rather than a flat field the upstream often omits.
 
 interface TraderData {
-  collateral?: number;
-  freeCollateral?: number;
-  unrealizedPnl?: number;
-  initialMargin?: number;
-  maintenanceMargin?: number;
-  accumulatedFunding?: number;
-  positions?: { symbol?: string; pnl?: number }[];
+  collateralBalance?: TokenAmount;
+  freeCollateral?: TokenAmount;
+  effectiveCollateralForWithdrawals?: TokenAmount;
+  unrealizedPnl?: TokenAmount;
+  crossInitialMargin?: TokenAmount;
+  crossMaintenanceMargin?: TokenAmount;
+  totalFunding?: TokenAmount;
+  positions?: RisePosition[];
   health?: number; // 0-100 float from Phoenix
   [key: string]: unknown;
 }
@@ -384,17 +389,25 @@ export function PortfolioHeaderWidget() {
   if (!user) return null;
 
   // ── Derived values ──────────────────────────────────────────────────────
-  // Phoenix's /v1/traders endpoint returns various fields.
-  // collateral = total deposited collateral
-  // freeCollateral = withdrawable (free / unused by margin)
-  // unrealizedPnl = sum of open position PnL
-  // initialMargin / maintenanceMargin / accumulatedFunding / health may be present
-  const collateral = trader?.collateral ?? 0;
-  const freeCollateral = trader?.freeCollateral ?? 0;
-  const unrealizedPnl = trader?.unrealizedPnl ?? 0;
-  const initialMargin = trader?.initialMargin ?? 0;
-  const maintenanceMargin = trader?.maintenanceMargin ?? 0;
-  const accumulatedFunding = trader?.accumulatedFunding ?? 0;
+  // All scalar fields come back TokenAmount-wrapped; read via toNumber.
+  // collateral = total deposited collateral (collateralBalance)
+  // crossInitialMargin = margin locked by open cross positions
+  // Withdrawable / freeCollateral is computed the SAME way as PortfolioPage:
+  //   freeCollateral = max(0, collateral - crossInitialMargin)
+  // where crossInitialMargin falls back to the sum of per-position initialMargin
+  // when the upstream omits the aggregate field. This avoids the old bug where
+  // the upstream often omits a flat `freeCollateral` field and the widget rendered 0.
+  const collateral = toNumber(trader?.collateralBalance);
+  const initialMargin = trader?.crossInitialMargin
+    ? toNumber(trader.crossInitialMargin)
+    : (Array.isArray(trader?.positions) ? trader!.positions! : []).reduce(
+        (s: number, p: RisePosition) => s + toNumber(p.initialMargin),
+        0,
+      );
+  const freeCollateral = Math.max(0, collateral - initialMargin);
+  const unrealizedPnl = toNumber(trader?.unrealizedPnl);
+  const maintenanceMargin = toNumber(trader?.crossMaintenanceMargin);
+  const accumulatedFunding = toNumber(trader?.totalFunding);
   // Total portfolio value = collateral + unrealizedPnl
   const totalPortfolioValue = collateral + unrealizedPnl;
   // Health: use phoenix's health field if present, else compute from margins
@@ -407,7 +420,7 @@ export function PortfolioHeaderWidget() {
       : 100;
   const healthPct = Math.round(computedHealth);
   const atRiskPositions = (trader?.positions ?? []).filter(
-    (p) => (p.pnl ?? 0) < -50,
+    (p) => toNumber(p.unrealizedPnl) < -50,
   ).length;
 
   // Display value in pill: only show if we have data
@@ -615,7 +628,7 @@ export function PortfolioHeaderWidget() {
       {showWithdraw && (
         <WithdrawDialog
           walletAddress={user.address}
-          maxCollateral={trader?.freeCollateral}
+          maxCollateral={freeCollateral}
           onClose={() => setShowWithdraw(false)}
           onDone={handleDone}
         />

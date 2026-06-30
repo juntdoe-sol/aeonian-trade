@@ -9,11 +9,15 @@ export interface TraderPosition {
   pnl?: number;
   leverage?: number;
   liquidationPrice?: number;
+  /** Initial margin posted for this position, in USD (margin at play). */
+  initialMargin?: number;
   subaccountIndex?: number;
   // Active exit triggers attached to the position (Phoenix /trader/state).
   // Present only when the trader has set a stop-loss / take-profit; 0 / undefined otherwise.
   stopLossPrice?: number;
   takeProfitPrice?: number;
+  /** Draft-only: marks this as the injected test position for celebration testing. */
+  _isMockDraftPosition?: boolean;
 }
 
 export interface TraderOrder {

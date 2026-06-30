@@ -43,9 +43,11 @@ import {
   Download,
   Trophy,
   FileText,
+  Plus,
 } from 'lucide-react';
 import { createAuthenticatedApiClient } from '@/lib/api-client';
 import { MonthlyPrizePotTab } from '@/components/admin/MonthlyPrizePotTab';
+import { AnalyticsTab } from '@/components/admin/AnalyticsTab';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -75,6 +77,12 @@ import {
 import { MetricGrid } from '@/components/poof-ui';
 import { uploadAppFiles, getAppFiles } from '@/lib/collections/appFiles';
 import { setAppSettings } from '@/lib/collections/appSettings';
+import {
+  subscribeManyDefaultAvatars,
+  setDefaultAvatars,
+  deleteDefaultAvatars,
+  type DefaultAvatarsResponse,
+} from '@/lib/collections/defaultAvatars';
 import { subscribeAllSocialLinks } from '@/lib/collections/socialLinks';
 import type { SocialLinksResponse } from '@/lib/collections/socialLinks';
 import { setBattles } from '@/lib/collections/battles';
@@ -89,6 +97,13 @@ import { AdminUserProfile } from '@/components/AdminUserProfile';
 import { uploadApkFiles, getApkFiles } from '@/lib/collections/apkFiles';
 import { subscribeApkRelease, setApkRelease, type ApkReleaseResponse } from '@/lib/collections/apkRelease';
 import { APK_RELEASE_ID } from '@/lib/constants';
+import {
+  subscribeManyArticles,
+  setArticles,
+  deleteArticles,
+  type ArticlesResponse,
+} from '@/lib/collections/articles';
+import { uploadAppFiles as uploadArticleImage, getAppFiles as getArticleImage } from '@/lib/collections/appFiles';
 
 // ─── Time helpers ───────────────────────────────────────────────────────────
 
@@ -833,6 +848,160 @@ function LogoSettings() {
         </label>
         <span className="text-xs text-muted-foreground">PNG, JPG, or SVG. Max 2MB.</span>
       </div>
+    </div>
+  );
+}
+
+// ─── Default Avatars Settings ────────────────────────────────────────────────
+
+function DefaultAvatarsSettings() {
+  const [uploading, setUploading] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const { data: rawAvatars } = useRealtimeData<DefaultAvatarsResponse[]>(
+    subscribeManyDefaultAvatars,
+    true,
+  );
+
+  const avatars = useMemo(() => {
+    if (!rawAvatars) return [];
+    return [...rawAvatars].sort((a, b) => {
+      if (a.createdAt !== b.createdAt) return a.createdAt - b.createdAt;
+      return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+    });
+  }, [rawAvatars]);
+
+  const handleFilesChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0) return;
+
+    // Validate all files before uploading any.
+    const validTypes = ['image/png', 'image/jpeg', 'image/jpg'];
+    const valid: File[] = [];
+    for (const file of files) {
+      if (!validTypes.includes(file.type)) {
+        toast.error(`${file.name}: only PNG and JPG files are allowed`);
+        continue;
+      }
+      if (file.size > 2 * 1024 * 1024) {
+        toast.error(`${file.name}: must be under 2MB`);
+        continue;
+      }
+      valid.push(file);
+    }
+
+    if (valid.length === 0) return;
+    setUploading(true);
+    let successCount = 0;
+
+    for (let i = 0; i < valid.length; i++) {
+      const file = valid[i];
+      try {
+        const id = `avatar-${Date.now()}-${i}`;
+        const uploaded = await uploadAppFiles(id, file);
+        if (!uploaded) { toast.error(`${file.name}: upload failed`); continue; }
+        const item = await getAppFiles(id);
+        if (!item?.url) { toast.error(`${file.name}: could not retrieve URL`); continue; }
+        const saved = await setDefaultAvatars(id, {
+          url: item.url,
+          createdAt: Math.floor(Date.now() / 1000),
+        });
+        if (saved) { successCount++; }
+        else { toast.error(`${file.name}: failed to save`); }
+      } catch {
+        toast.error(`${file.name}: upload error`);
+      }
+    }
+
+    setUploading(false);
+    if (successCount > 0) {
+      toast.success(`${successCount} ${successCount === 1 ? 'avatar' : 'avatars'} uploaded`);
+    }
+    // Reset input so the same files can be re-selected if needed.
+    e.target.value = '';
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!window.confirm('Remove this avatar from the default pool?')) return;
+    setDeletingId(id);
+    const ok = await deleteDefaultAvatars(id);
+    setDeletingId(null);
+    if (ok) { toast.success('Avatar removed'); }
+    else { toast.error('Failed to remove avatar'); }
+  };
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <p className="text-sm font-medium mb-1">Default Avatar Pool</p>
+        <p className="text-xs text-muted-foreground">
+          Users without a connected X account get one of these avatars, assigned deterministically by wallet address. The same wallet always gets the same avatar.
+        </p>
+      </div>
+
+      {/* Upload control */}
+      <div className="flex items-center gap-3">
+        <label className="cursor-pointer">
+          <input
+            type="file"
+            accept=".png,.jpg,.jpeg"
+            multiple
+            onChange={handleFilesChange}
+            disabled={uploading}
+            className="hidden"
+          />
+          <Button
+            variant="outline"
+            disabled={uploading}
+            className="gap-2 glass-button"
+            asChild
+          >
+            <span>
+              {uploading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Upload className="h-4 w-4" />
+              )}
+              {uploading ? 'Uploading...' : 'Upload Avatars'}
+            </span>
+          </Button>
+        </label>
+        <span className="text-xs text-muted-foreground">PNG or JPG. Max 2MB each. Multiple files allowed.</span>
+      </div>
+
+      {/* Avatar grid */}
+      {avatars.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-muted-foreground/20 p-8 text-center">
+          <ImageIcon className="h-8 w-8 mx-auto mb-2 text-muted-foreground opacity-30" />
+          <p className="text-sm text-muted-foreground">No default avatars uploaded yet</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-4 sm:grid-cols-6 gap-3">
+          {avatars.map((avatar) => (
+            <div key={avatar.id} className="relative group">
+              <img
+                src={avatar.url}
+                alt="Default avatar"
+                className="w-full aspect-square rounded-xl object-cover"
+                style={{ border: '1px solid rgba(255,255,255,0.08)' }}
+              />
+              <button
+                onClick={() => handleDelete(avatar.id)}
+                disabled={deletingId === avatar.id}
+                aria-label="Remove avatar"
+                className="absolute top-1 right-1 w-6 h-6 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                style={{ background: 'rgba(255,82,82,0.85)', color: '#fff' }}
+              >
+                {deletingId === avatar.id ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Trash2 className="h-3 w-3" />
+                )}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -1846,6 +2015,219 @@ function ApkReleasesTab() {
   );
 }
 
+// ─── Admin Articles Tab (INTERN vs MARKET) ────────────────────────────────────
+
+function AdminArticlesTab() {
+  const { data: articles } = useRealtimeData<ArticlesResponse[]>(
+    subscribeManyArticles,
+    true,
+  );
+  const sorted = useMemo(
+    () => [...(articles ?? [])].sort((a: ArticlesResponse, b: ArticlesResponse) => b.createdAt - a.createdAt),
+    [articles],
+  );
+
+  const [open, setOpen] = useState(false);
+  const [title, setTitle] = useState('');
+  const [link, setLink] = useState('');
+  const [body, setBody] = useState('');
+  const [imageUrl, setImageUrl] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [imageMode, setImageMode] = useState<'url' | 'upload'>('url');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif'].includes(file.type)) {
+      toast.error('Only PNG, JPG, WebP, or GIF images allowed');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image must be under 5MB');
+      return;
+    }
+    setUploading(true);
+    try {
+      const fileId = `article-img-${Date.now()}`;
+      const ok = await uploadArticleImage(fileId, file);
+      if (!ok) { toast.error('Upload failed'); return; }
+      const item = await getArticleImage(fileId);
+      if (!item?.url) { toast.error('Could not retrieve image URL'); return; }
+      setImageUrl(item.url);
+      toast.success('Image uploaded');
+    } catch {
+      toast.error('Upload error');
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!title.trim() || !link.trim()) {
+      toast.error('Title and link are required');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const articleId = `article-${Date.now()}`;
+      const ok = await setArticles(articleId, {
+        title: title.trim(),
+        link: link.trim(),
+        body: body.trim() || undefined,
+        imageUrl: imageUrl.trim() || undefined,
+        createdAt: Time.Now,
+      });
+      if (ok) {
+        toast.success('Article posted');
+        setTitle(''); setLink(''); setBody(''); setImageUrl(''); setOpen(false);
+      } else {
+        toast.error('Failed to post article');
+      }
+    } catch {
+      toast.error('Error posting article');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Delete this article?')) return;
+    const ok = await deleteArticles(id);
+    if (ok) toast.success('Article deleted');
+    else toast.error('Failed to delete article');
+  };
+
+  return (
+    <div className="space-y-4">
+      <Card className="glass-card">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            <FileText className="h-4 w-4 text-primary" />
+            INTERN vs MARKET Articles
+            <Badge variant="outline" className="ml-auto text-[10px] font-mono">{sorted.length}</Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0 space-y-4">
+          {/* Compose form */}
+          {!open ? (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setOpen(true)}
+              className="w-full gap-2 text-xs"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Post New Article
+            </Button>
+          ) : (
+            <div className="space-y-3 rounded-lg border p-4">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-primary">New Article</span>
+                <button onClick={() => setOpen(false)}><X className="h-4 w-4 text-muted-foreground" /></button>
+              </div>
+              <Input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Title *"
+                className="text-xs h-8"
+              />
+              <Input
+                value={link}
+                onChange={(e) => setLink(e.target.value)}
+                placeholder="Article URL *"
+                className="text-xs h-8"
+              />
+              <textarea
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+                placeholder="Short description (optional)"
+                rows={2}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs outline-none resize-none text-foreground"
+              />
+              {/* Image mode toggle */}
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant={imageMode === 'url' ? 'default' : 'outline'}
+                  onClick={() => setImageMode('url')}
+                  className="text-[10px] h-6 px-2"
+                >
+                  Paste URL
+                </Button>
+                <Button
+                  size="sm"
+                  variant={imageMode === 'upload' ? 'default' : 'outline'}
+                  onClick={() => setImageMode('upload')}
+                  className="text-[10px] h-6 px-2"
+                >
+                  Upload
+                </Button>
+              </div>
+              {imageMode === 'url' ? (
+                <Input
+                  value={imageUrl}
+                  onChange={(e) => setImageUrl(e.target.value)}
+                  placeholder="Image URL (optional)"
+                  className="text-xs h-8"
+                />
+              ) : (
+                <div>
+                  <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploading}
+                    className="w-full gap-2 text-xs"
+                  >
+                    <Upload className="h-3.5 w-3.5" />
+                    {uploading ? 'Uploading...' : imageUrl ? 'Replace image' : 'Choose image'}
+                  </Button>
+                  {imageUrl && <p className="text-[10px] text-primary mt-1">Image ready</p>}
+                </div>
+              )}
+              <Button
+                size="sm"
+                onClick={handleSubmit}
+                disabled={submitting || !title.trim() || !link.trim()}
+                className="w-full text-xs"
+              >
+                {submitting ? 'Posting...' : 'Post Article'}
+              </Button>
+            </div>
+          )}
+
+          {/* Articles list */}
+          {sorted.length === 0 ? (
+            <div className="py-8 text-center text-sm text-muted-foreground">No articles yet</div>
+          ) : (
+            <div className="space-y-2">
+              {sorted.map((article: ArticlesResponse) => (
+                <div key={article.id} className="flex items-start gap-3 rounded-lg border p-3">
+                  {article.imageUrl && (
+                    <img src={article.imageUrl} alt={article.title} className="w-12 h-12 rounded object-cover flex-shrink-0" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <a href={article.link} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold hover:underline text-foreground">{article.title}</a>
+                    {article.body && <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-1">{article.body}</p>}
+                    <p className="text-[10px] text-muted-foreground mt-1">{new Date(article.createdAt * 1000).toLocaleDateString()}</p>
+                  </div>
+                  <button onClick={() => handleDelete(article.id)} className="p-1.5 rounded hover:bg-destructive/10 text-destructive flex-shrink-0">
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 
 export function AdminDashboard() {
@@ -2043,8 +2425,12 @@ export function AdminDashboard() {
         />
 
         {/* Tabs */}
-        <Tabs defaultValue="leaderboard">
+        <Tabs defaultValue="analytics">
           <TabsList className="mb-4 glass-card">
+            <TabsTrigger value="analytics" className="gap-1.5 text-xs">
+              <TrendingUp className="h-3.5 w-3.5" />
+              Analytics
+            </TabsTrigger>
             <TabsTrigger value="leaderboard" className="gap-1.5 text-xs">
               <BarChart3 className="h-3.5 w-3.5" />
               Leaderboard
@@ -2084,6 +2470,10 @@ export function AdminDashboard() {
             <TabsTrigger value="prize-pot" className="gap-1.5 text-xs">
               <Trophy className="h-3.5 w-3.5" />
               Prize Pot
+            </TabsTrigger>
+            <TabsTrigger value="articles" className="gap-1.5 text-xs">
+              <FileText className="h-3.5 w-3.5" />
+              Articles
             </TabsTrigger>
           </TabsList>
 
@@ -2185,6 +2575,9 @@ export function AdminDashboard() {
               </CardHeader>
               <CardContent className="pt-0 space-y-8">
                 <LogoSettings />
+                <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '1.5rem' }}>
+                  <DefaultAvatarsSettings />
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
@@ -2217,6 +2610,16 @@ export function AdminDashboard() {
           {/* Monthly Prize Pot tab */}
           <TabsContent value="prize-pot">
             <MonthlyPrizePotTab />
+          </TabsContent>
+
+          {/* Analytics tab */}
+          <TabsContent value="analytics">
+            <AnalyticsTab />
+          </TabsContent>
+
+          {/* INTERN vs MARKET articles tab */}
+          <TabsContent value="articles">
+            <AdminArticlesTab />
           </TabsContent>
         </Tabs>
       </div>

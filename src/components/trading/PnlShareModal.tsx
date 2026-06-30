@@ -18,6 +18,8 @@ import { getTokenLogoUrl, getFallbackLogoUrl } from '@/utils/token-logos';
 import { useAuth } from '@pooflabs/web';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useAppLogo } from '@/hooks/use-app-logo';
+import { useDefaultAvatars } from '@/hooks/use-default-avatars';
+import { pickDefaultAvatar } from '@/utils/default-avatar';
 import PnlShareCard, { PnlOverlayCapture } from './PnlShareCard';
 import type { ClosedTrade } from '@/utils/trade-computations';
 
@@ -47,6 +49,7 @@ export function PnlShareModal({ open, onClose, trade }: PnlShareModalProps) {
   const { user, login } = useAuth();
   const isMobile = useIsMobile();
   const platformLogoUrl = useAppLogo();
+  const defaultAvatarUrls = useDefaultAvatars();
 
   // Pre-fetch the dedicated PnL share-card background as a data URL so html-to-image
   // can embed it without cross-origin taint issues (remote S3 URLs are silently
@@ -122,7 +125,19 @@ export function PnlShareModal({ open, onClose, trade }: PnlShareModalProps) {
       if (user?.address) {
         const storageKey = `social:${user.address}:twitter`;
         getSocialLinks(storageKey).then(async (link) => {
-          if (!link?.profile) return;
+          if (!link?.profile) {
+            // No X profile — fall back to the default avatar pool if available.
+            const fallbackUrl = pickDefaultAvatar(user.address, defaultAvatarUrls);
+            if (fallbackUrl) {
+              try {
+                const dataUrl = await remoteUrlToDataUrl(fallbackUrl);
+                setXAvatarDataUrl(dataUrl);
+              } catch {
+                // default avatar fetch failed — card shows without avatar
+              }
+            }
+            return;
+          }
           try {
             const parsed = typeof link.profile === 'string' ? JSON.parse(link.profile) : link.profile;
             if (!parsed?.username) return;
@@ -133,6 +148,17 @@ export function PnlShareModal({ open, onClose, trade }: PnlShareModalProps) {
                 setXAvatarDataUrl(dataUrl);
               } catch {
                 // avatar fetch failed — username still shows, avatar silently omitted
+              }
+            } else {
+              // Has X username but no avatar — try default avatar pool.
+              const fallbackUrl = pickDefaultAvatar(user.address, defaultAvatarUrls);
+              if (fallbackUrl) {
+                try {
+                  const dataUrl = await remoteUrlToDataUrl(fallbackUrl);
+                  setXAvatarDataUrl(dataUrl);
+                } catch {
+                  // default avatar fetch failed — card shows without avatar
+                }
               }
             }
           } catch {
@@ -147,7 +173,7 @@ export function PnlShareModal({ open, onClose, trade }: PnlShareModalProps) {
       setXAvatarDataUrl(undefined);
     }
     prevOpenRef.current = open;
-  }, [open, trade, user?.address]);
+  }, [open, trade, user?.address, defaultAvatarUrls]);
 
   // Card design dimensions
   const CARD_W = 800;

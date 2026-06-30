@@ -15,10 +15,15 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth, getIdToken } from '@pooflabs/web';
+import { useDefaultAvatars } from '@/hooks/use-default-avatars';
+import { pickDefaultAvatar } from '@/utils/default-avatar';
 import {
-  Copy, Check, TrendingUp, TrendingDown, UserPlus, UserCheck, Loader2, Users, Copy as CopyIcon, EyeOff, Eye, Trophy,
+  Copy, Check, UserPlus, UserCheck, Loader2, Users, Copy as CopyIcon, EyeOff, Eye, Trophy, X,
 } from 'lucide-react';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
+import { Dialog, DialogPortal, DialogOverlay, DialogClose } from '@/components/ui/dialog';
+import * as DialogPrimitive from '@radix-ui/react-dialog';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { useRealtimeData } from '@/hooks/use-realtime-data';
 import { useOAuth } from '@/hooks/useOAuth';
 import {
@@ -334,289 +339,344 @@ export function UserProfilePopup({
     }
   };
 
+  const isMobile = useIsMobile();
+
+  // Default avatar pool — subscribed once at the popup level.
+  const defaultAvatarUrls = useDefaultAvatars();
+  const defaultAvatar = pickDefaultAvatar(traderAddress, defaultAvatarUrls);
+
   const displayName = xProfile?.username ? `@${xProfile.username}` : truncateAddress(traderAddress ?? '');
   const initial = (xProfile?.username ?? traderAddress ?? '?').charAt(0).toUpperCase();
   const closedTrades = profile?.closedTrades ?? [];
   const openPositions = profile?.openPositions ?? [];
 
-  return (
-    <Sheet open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <SheetContent
-        side='bottom'
-        className='glass-card border-t p-0 max-h-[88dvh] overflow-hidden flex flex-col'
-        style={{
-          background: 'hsl(270 45% 9% / 0.92)',
-          backdropFilter: 'blur(24px)',
-          WebkitBackdropFilter: 'blur(24px)',
-          borderColor: 'rgba(255,255,255,0.08)',
-          borderTopLeftRadius: 24,
-          borderTopRightRadius: 24,
-        }}
-      >
-        {/* Grab handle */}
-        <div className='flex justify-center pt-3 pb-1'>
-          <div className='w-10 h-1 rounded-full' style={{ background: 'rgba(255,255,255,0.18)' }} />
-        </div>
-
-        <div className='overflow-y-auto px-5 pb-8 pt-2'>
-          {/* ── Header: avatar + identity ───────────────────────────────────── */}
-          <div className='flex items-center gap-3.5'>
-            {xProfile?.avatar ? (
-              <img
-                src={xProfile.avatar}
-                alt={xProfile.username}
-                className='w-14 h-14 rounded-full object-cover flex-shrink-0'
-                style={{ border: '2px solid rgba(183,148,246,0.35)' }}
-              />
-            ) : (
-              <div
-                className='w-14 h-14 rounded-full flex items-center justify-center text-xl font-black flex-shrink-0'
-                style={{ background: 'rgba(183,148,246,0.14)', color: ACCENT, border: '2px solid rgba(183,148,246,0.25)' }}
-              >
-                {initial}
-              </div>
-            )}
-
-            <div className='min-w-0 flex-1'>
-              <div className='flex items-center gap-2'>
-                <div className='text-lg font-black truncate' style={{ color: '#fff' }}>{displayName}</div>
-                {previewAsOther && (
-                  <span
-                    className='flex-shrink-0 inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full'
-                    style={{ color: ACCENT, background: 'rgba(183,148,246,0.16)', border: '1px solid rgba(183,148,246,0.32)' }}
-                  >
-                    <Eye size={11} />
-                    Preview
-                  </span>
-                )}
-              </div>
-              {/* Wallet + copy */}
-              <button
-                onClick={handleCopy}
-                className='flex items-center gap-1.5 mt-0.5 text-xs transition-colors'
-                style={{ color: '#7A7A8A' }}
-              >
-                <span className='font-mono'>{truncateAddress(traderAddress ?? '', 6, 6)}</span>
-                {copied
-                  ? <Check size={12} style={{ color: POS }} />
-                  : <Copy size={12} />}
-              </button>
-            </div>
+  // ── Shared inner content (used by both Sheet and Dialog) ─────────────────────
+  const profileBody = (
+    <div className='overflow-y-auto px-5 pb-8 pt-2'>
+      {/* ── Header: avatar + identity ───────────────────────────────────── */}
+      <div className='flex items-center gap-3.5'>
+        {xProfile?.avatar ? (
+          <img
+            src={xProfile.avatar}
+            alt={xProfile.username}
+            className='w-14 h-14 rounded-full object-cover flex-shrink-0'
+            style={{ border: '2px solid rgba(183,148,246,0.35)' }}
+          />
+        ) : defaultAvatar ? (
+          <img
+            src={defaultAvatar}
+            alt='avatar'
+            className='w-14 h-14 rounded-full object-cover flex-shrink-0'
+            style={{ border: '2px solid rgba(183,148,246,0.25)' }}
+          />
+        ) : (
+          <div
+            className='w-14 h-14 rounded-full flex items-center justify-center text-xl font-black flex-shrink-0'
+            style={{ background: 'rgba(183,148,246,0.14)', color: ACCENT, border: '2px solid rgba(183,148,246,0.25)' }}
+          >
+            {initial}
           </div>
+        )}
 
-          {/* ── Follower count + Follow button ──────────────────────────────── */}
-          <div className='flex items-center gap-3 mt-4'>
-            <div className='flex items-center gap-1.5'>
-              <Users size={15} style={{ color: ACCENT }} />
-              <span className='text-sm font-bold' style={{ color: '#fff' }}>{followerCount}</span>
-              <span className='text-xs' style={{ color: '#7A7A8A' }}>
-                {followerCount === 1 ? 'follower' : 'followers'}
-              </span>
-            </div>
-
-            {!isOwnProfile && !previewAsOther && (
-              <button
-                onClick={handleFollowToggle}
-                disabled={followBusy}
-                className='ml-auto flex items-center gap-1.5 text-sm font-bold px-4 py-2 rounded-xl transition-all disabled:opacity-60'
-                style={
-                  isFollowing
-                    ? { background: 'rgba(255,255,255,0.06)', color: '#C8C8D4', border: '1px solid rgba(255,255,255,0.1)' }
-                    : { background: ACCENT, color: '#1a0b2e', border: '1px solid transparent' }
-                }
-              >
-                {followBusy
-                  ? <Loader2 size={14} className='animate-spin' />
-                  : isFollowing
-                    ? <UserCheck size={14} />
-                    : <UserPlus size={14} />}
-                {isFollowing ? 'Following' : 'Follow'}
-              </button>
-            )}
-
-            {/* Preview mode: show Follow as a read-only, non-interactive cue. */}
+        <div className='min-w-0 flex-1'>
+          <div className='flex items-center gap-2'>
+            <div className='text-lg font-black truncate' style={{ color: '#fff' }}>{displayName}</div>
             {previewAsOther && (
-              <div
-                role='button'
-                aria-disabled='true'
-                tabIndex={-1}
-                className='ml-auto select-none flex items-center gap-1.5 text-sm font-bold px-4 py-2 rounded-xl cursor-not-allowed'
-                style={{ background: ACCENT, color: '#1a0b2e', opacity: 0.75 }}
+              <span
+                className='flex-shrink-0 inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full'
+                style={{ color: ACCENT, background: 'rgba(183,148,246,0.16)', border: '1px solid rgba(183,148,246,0.32)' }}
               >
-                <UserPlus size={14} />
-                Follow
-              </div>
+                <Eye size={11} />
+                Preview
+              </span>
             )}
           </div>
+          {/* Wallet + copy */}
+          <button
+            onClick={handleCopy}
+            className='flex items-center gap-1.5 mt-0.5 text-xs transition-colors'
+            style={{ color: '#7A7A8A' }}
+          >
+            <span className='font-mono'>{truncateAddress(traderAddress ?? '', 6, 6)}</span>
+            {copied
+              ? <Check size={12} style={{ color: POS }} />
+              : <Copy size={12} />}
+          </button>
+        </div>
+      </div>
 
-          {/* ── Monthly Reward Winner ───────────────────────────────────────── */}
-          {monthlyWins.length > 0 && (
-            <div
-              className='mt-4 rounded-2xl p-4'
-              style={{
-                background: 'linear-gradient(135deg, rgba(255,215,0,0.10), rgba(255,215,0,0.03))',
-                border: '1px solid rgba(255,215,0,0.25)',
-              }}
-            >
-              <div className='flex items-center gap-2 mb-2.5'>
-                <Trophy size={15} style={{ color: '#FFD700' }} />
-                <span className='text-sm font-black' style={{ color: '#E8C547' }}>
-                  Monthly Reward Winner
-                </span>
-              </div>
-              <div className='flex flex-wrap gap-2'>
-                {monthlyWins.map((w) => (
-                  <span
-                    key={w.monthKey}
-                    className='inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full'
-                    style={{ background: 'rgba(255,215,0,0.12)', color: '#E8C547', border: '1px solid rgba(255,215,0,0.3)' }}
-                  >
-                    <Trophy size={11} style={{ color: '#FFD700' }} />
-                    {monthLabel(w.monthKey)}
-                    <span style={{ opacity: 0.6 }}>· #{w.rank}</span>
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
+      {/* ── Follower count + Follow button ──────────────────────────────── */}
+      <div className='flex items-center gap-3 mt-4'>
+        <div className='flex items-center gap-1.5'>
+          <Users size={15} style={{ color: ACCENT }} />
+          <span className='text-sm font-bold' style={{ color: '#fff' }}>{followerCount}</span>
+          <span className='text-xs' style={{ color: '#7A7A8A' }}>
+            {followerCount === 1 ? 'follower' : 'followers'}
+          </span>
+        </div>
 
-          {/* ── Copy Trade (coming soon, non-functional) ────────────────────── */}
-          {!isOwnProfile && (
-            <div
-              className='mt-3 rounded-2xl p-4'
-              style={{
-                background: 'linear-gradient(135deg, rgba(183,148,246,0.10), rgba(183,148,246,0.03))',
-                border: '1px solid rgba(183,148,246,0.18)',
-              }}
-            >
-              <div className='flex items-center justify-between gap-2'>
-                <div className='flex items-center gap-2'>
-                  <span className='text-sm font-black' style={{ color: '#fff' }}>Copy Trade</span>
-                </div>
-                <span
-                  className='text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full'
-                  style={{ color: ACCENT, background: 'rgba(183,148,246,0.16)', border: '1px solid rgba(183,148,246,0.3)' }}
-                >
-                  Coming Soon
-                </span>
-              </div>
+        {!isOwnProfile && !previewAsOther && (
+          <button
+            onClick={handleFollowToggle}
+            disabled={followBusy}
+            className='ml-auto flex items-center gap-1.5 text-sm font-bold px-4 py-2 rounded-xl transition-all disabled:opacity-60'
+            style={
+              isFollowing
+                ? { background: 'rgba(255,255,255,0.06)', color: '#C8C8D4', border: '1px solid rgba(255,255,255,0.1)' }
+                : { background: ACCENT, color: '#1a0b2e', border: '1px solid transparent' }
+            }
+          >
+            {followBusy
+              ? <Loader2 size={14} className='animate-spin' />
+              : isFollowing
+                ? <UserCheck size={14} />
+                : <UserPlus size={14} />}
+            {isFollowing ? 'Following' : 'Follow'}
+          </button>
+        )}
 
-              <p className='text-xs leading-relaxed mt-2' style={{ color: '#A8A8B8' }}>
-                AI-powered copy trading. Coming soon.
-              </p>
+        {/* Preview mode: show Follow as a read-only, non-interactive cue. */}
+        {previewAsOther && (
+          <div
+            role='button'
+            aria-disabled='true'
+            tabIndex={-1}
+            className='ml-auto select-none flex items-center gap-1.5 text-sm font-bold px-4 py-2 rounded-xl cursor-not-allowed'
+            style={{ background: ACCENT, color: '#1a0b2e', opacity: 0.75 }}
+          >
+            <UserPlus size={14} />
+            Follow
+          </div>
+        )}
+      </div>
 
-              {/* Non-functional preview button — no click handler, not focusable */}
-              <div
-                role='button'
-                aria-disabled='true'
-                tabIndex={-1}
-                className='select-none w-full flex items-center justify-center gap-2 mt-3 text-sm font-bold px-4 py-2.5 rounded-xl cursor-not-allowed'
-                style={{
-                  background: 'rgba(183,148,246,0.10)',
-                  color: ACCENT,
-                  border: '1px dashed rgba(183,148,246,0.4)',
-                }}
+      {/* ── Monthly Reward Winner ───────────────────────────────────────── */}
+      {monthlyWins.length > 0 && (
+        <div
+          className='mt-4 rounded-2xl p-4'
+          style={{
+            background: 'linear-gradient(135deg, rgba(255,215,0,0.10), rgba(255,215,0,0.03))',
+            border: '1px solid rgba(255,215,0,0.25)',
+          }}
+        >
+          <div className='flex items-center gap-2 mb-2.5'>
+            <Trophy size={15} style={{ color: '#FFD700' }} />
+            <span className='text-sm font-black' style={{ color: '#E8C547' }}>
+              Monthly Reward Winner
+            </span>
+          </div>
+          <div className='flex flex-wrap gap-2'>
+            {monthlyWins.map((w) => (
+              <span
+                key={w.monthKey}
+                className='inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full'
+                style={{ background: 'rgba(255,215,0,0.12)', color: '#E8C547', border: '1px solid rgba(255,215,0,0.3)' }}
               >
-                <CopyIcon size={14} />
-                Copy this trader
-              </div>
-            </div>
-          )}
-
-          {/* ── Connect-X prompt (own profile, X not linked) ────────────────── */}
-          {isOwnProfile && !xProfile && (
-            <button
-              onClick={() => connect('twitter')}
-              className='w-full flex items-center justify-center gap-2 mt-4 text-sm font-bold px-4 py-2.5 rounded-xl transition-all'
-              style={{ background: 'rgba(183,148,246,0.12)', color: ACCENT, border: '1px solid rgba(183,148,246,0.3)' }}
-            >
-              <svg viewBox='0 0 24 24' fill='currentColor' width={14} height={14}>
-                <path d='M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.746l7.73-8.835L1.254 2.25H8.08l4.26 5.632L18.244 2.25zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77z' />
-              </svg>
-              Connect X to show your handle
-            </button>
-          )}
-
-          {/* ── PnL tiles ───────────────────────────────────────────────────── */}
-          <div className='mt-5'>
-            <div className='text-xs font-bold uppercase tracking-wider mb-2.5' style={{ color: '#7A7A8A' }}>
-              Performance
-            </div>
-            {loadingProfile ? (
-              <div className='grid grid-cols-2 gap-2'>
-                {[0, 1, 2, 3].map((i) => (
-                  <div key={i} className='h-[58px] rounded-xl animate-pulse' style={{ background: 'rgba(255,255,255,0.04)' }} />
-                ))}
-              </div>
-            ) : profile?.notFound ? (
-              <div className='rounded-xl px-3 py-4 text-center text-sm' style={{ background: 'rgba(255,255,255,0.03)', color: '#7A7A8A' }}>
-                No trading activity yet
-              </div>
-            ) : (
-              <div className='grid grid-cols-2 gap-2'>
-                <PnlTile label='Unrealized' value={profile?.unrealizedPnl ?? null} hidden={maskPnl} />
-                <PnlTile label='Realized 24h' value={profile?.realized24h ?? 0} hidden={maskPnl} />
-                <PnlTile label='Realized 7d' value={profile?.realized7d ?? 0} hidden={maskPnl} />
-                <PnlTile label='Realized 30d' value={profile?.realized30d ?? 0} hidden={maskPnl} />
-              </div>
-            )}
-            {maskPnl && !loadingProfile && !profile?.notFound && (
-              <div className='flex items-center gap-1.5 mt-2 text-[11px]' style={{ color: '#6A6A7A' }}>
-                <EyeOff size={12} style={{ color: '#6A6A7A' }} />
-                {previewAsOther ? 'Your PnL would be hidden from others' : 'This trader has hidden their PnL'}
-              </div>
-            )}
-          </div>
-
-          {/* ── Open positions ──────────────────────────────────────────────── */}
-          <div className='mt-5'>
-            <div className='text-xs font-bold uppercase tracking-wider mb-2.5' style={{ color: '#7A7A8A' }}>
-              Open Positions
-            </div>
-            {loadingProfile ? (
-              <div className='space-y-2'>
-                {[0, 1].map((i) => (
-                  <div key={i} className='h-[52px] rounded-lg animate-pulse' style={{ background: 'rgba(255,255,255,0.03)' }} />
-                ))}
-              </div>
-            ) : openPositions.length === 0 ? (
-              <div className='rounded-xl px-3 py-4 text-center text-sm' style={{ background: 'rgba(255,255,255,0.03)', color: '#7A7A8A' }}>
-                No open positions
-              </div>
-            ) : (
-              <div className='space-y-1.5'>
-                {openPositions.map((p, i) => (
-                  <OpenPositionRow key={`${p.symbol}-${p.side}-${i}`} pos={p} hidden={maskPnl} />
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* ── Trade activity ──────────────────────────────────────────────── */}
-          <div className='mt-5'>
-            <div className='text-xs font-bold uppercase tracking-wider mb-2.5' style={{ color: '#7A7A8A' }}>
-              Recent Trades
-            </div>
-            {loadingProfile ? (
-              <div className='space-y-2'>
-                {[0, 1, 2].map((i) => (
-                  <div key={i} className='h-[52px] rounded-lg animate-pulse' style={{ background: 'rgba(255,255,255,0.03)' }} />
-                ))}
-              </div>
-            ) : closedTrades.length === 0 ? (
-              <div className='rounded-xl px-3 py-4 text-center text-sm' style={{ background: 'rgba(255,255,255,0.03)', color: '#7A7A8A' }}>
-                No closed trades yet
-              </div>
-            ) : (
-              <div className='space-y-1.5 max-h-[290px] overflow-y-auto pr-1'>
-                {closedTrades.slice(0, 50).map((t, i) => (
-                  <ActivityRow key={`${t.symbol}-${t.timestamp}-${i}`} trade={t} hidden={maskPnl} />
-                ))}
-              </div>
-            )}
+                <Trophy size={11} style={{ color: '#FFD700' }} />
+                {monthLabel(w.monthKey)}
+                <span style={{ opacity: 0.6 }}>· #{w.rank}</span>
+              </span>
+            ))}
           </div>
         </div>
-      </SheetContent>
-    </Sheet>
+      )}
+
+      {/* ── Copy Trade (coming soon, non-functional) ────────────────────── */}
+      {!isOwnProfile && (
+        <div
+          className='mt-3 rounded-2xl p-4'
+          style={{
+            background: 'linear-gradient(135deg, rgba(183,148,246,0.10), rgba(183,148,246,0.03))',
+            border: '1px solid rgba(183,148,246,0.18)',
+          }}
+        >
+          <div className='flex items-center justify-between gap-2'>
+            <div className='flex items-center gap-2'>
+              <span className='text-sm font-black' style={{ color: '#fff' }}>Copy Trade</span>
+            </div>
+            <span
+              className='text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full'
+              style={{ color: ACCENT, background: 'rgba(183,148,246,0.16)', border: '1px solid rgba(183,148,246,0.3)' }}
+            >
+              Coming Soon
+            </span>
+          </div>
+
+          <p className='text-xs leading-relaxed mt-2' style={{ color: '#A8A8B8' }}>
+            AI-powered copy trading. Coming soon.
+          </p>
+
+          {/* Non-functional preview button — no click handler, not focusable */}
+          <div
+            role='button'
+            aria-disabled='true'
+            tabIndex={-1}
+            className='select-none w-full flex items-center justify-center gap-2 mt-3 text-sm font-bold px-4 py-2.5 rounded-xl cursor-not-allowed'
+            style={{
+              background: 'rgba(183,148,246,0.10)',
+              color: ACCENT,
+              border: '1px dashed rgba(183,148,246,0.4)',
+            }}
+          >
+            <CopyIcon size={14} />
+            Copy this trader
+          </div>
+        </div>
+      )}
+
+      {/* ── Connect-X prompt (own profile, X not linked) ────────────────── */}
+      {isOwnProfile && !xProfile && (
+        <button
+          onClick={() => connect('twitter')}
+          className='w-full flex items-center justify-center gap-2 mt-4 text-sm font-bold px-4 py-2.5 rounded-xl transition-all'
+          style={{ background: 'rgba(183,148,246,0.12)', color: ACCENT, border: '1px solid rgba(183,148,246,0.3)' }}
+        >
+          <svg viewBox='0 0 24 24' fill='currentColor' width={14} height={14}>
+            <path d='M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.746l7.73-8.835L1.254 2.25H8.08l4.26 5.632L18.244 2.25zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77z' />
+          </svg>
+          Connect X to show your handle
+        </button>
+      )}
+
+      {/* ── PnL tiles ───────────────────────────────────────────────────── */}
+      <div className='mt-5'>
+        <div className='text-xs font-bold uppercase tracking-wider mb-2.5' style={{ color: '#7A7A8A' }}>
+          Performance
+        </div>
+        {loadingProfile ? (
+          <div className='grid grid-cols-2 gap-2'>
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className='h-[58px] rounded-xl animate-pulse' style={{ background: 'rgba(255,255,255,0.04)' }} />
+            ))}
+          </div>
+        ) : profile?.notFound ? (
+          <div className='rounded-xl px-3 py-4 text-center text-sm' style={{ background: 'rgba(255,255,255,0.03)', color: '#7A7A8A' }}>
+            No trading activity yet
+          </div>
+        ) : (
+          <div className='grid grid-cols-2 gap-2'>
+            <PnlTile label='Unrealized' value={profile?.unrealizedPnl ?? null} hidden={maskPnl} />
+            <PnlTile label='Realized 24h' value={profile?.realized24h ?? 0} hidden={maskPnl} />
+            <PnlTile label='Realized 7d' value={profile?.realized7d ?? 0} hidden={maskPnl} />
+            <PnlTile label='Realized 30d' value={profile?.realized30d ?? 0} hidden={maskPnl} />
+          </div>
+        )}
+        {maskPnl && !loadingProfile && !profile?.notFound && (
+          <div className='flex items-center gap-1.5 mt-2 text-[11px]' style={{ color: '#6A6A7A' }}>
+            <EyeOff size={12} style={{ color: '#6A6A7A' }} />
+            {previewAsOther ? 'Your PnL would be hidden from others' : 'This trader has hidden their PnL'}
+          </div>
+        )}
+      </div>
+
+      {/* ── Open positions ──────────────────────────────────────────────── */}
+      <div className='mt-5'>
+        <div className='text-xs font-bold uppercase tracking-wider mb-2.5' style={{ color: '#7A7A8A' }}>
+          Open Positions
+        </div>
+        {loadingProfile ? (
+          <div className='space-y-2'>
+            {[0, 1].map((i) => (
+              <div key={i} className='h-[52px] rounded-lg animate-pulse' style={{ background: 'rgba(255,255,255,0.03)' }} />
+            ))}
+          </div>
+        ) : openPositions.length === 0 ? (
+          <div className='rounded-xl px-3 py-4 text-center text-sm' style={{ background: 'rgba(255,255,255,0.03)', color: '#7A7A8A' }}>
+            No open positions
+          </div>
+        ) : (
+          <div className='space-y-1.5'>
+            {openPositions.map((p, i) => (
+              <OpenPositionRow key={`${p.symbol}-${p.side}-${i}`} pos={p} hidden={maskPnl} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── Trade activity ──────────────────────────────────────────────── */}
+      <div className='mt-5'>
+        <div className='text-xs font-bold uppercase tracking-wider mb-2.5' style={{ color: '#7A7A8A' }}>
+          Battles
+        </div>
+        {loadingProfile ? (
+          <div className='space-y-2'>
+            {[0, 1, 2].map((i) => (
+              <div key={i} className='h-[52px] rounded-lg animate-pulse' style={{ background: 'rgba(255,255,255,0.03)' }} />
+            ))}
+          </div>
+        ) : closedTrades.length === 0 ? (
+          <div className='rounded-xl px-3 py-4 text-center text-sm' style={{ background: 'rgba(255,255,255,0.03)', color: '#7A7A8A' }}>
+            No closed trades yet
+          </div>
+        ) : (
+          <div className='space-y-1.5 max-h-[290px] overflow-y-auto pr-1'>
+            {closedTrades.slice(0, 50).map((t, i) => (
+              <ActivityRow key={`${t.symbol}-${t.timestamp}-${i}`} trade={t} hidden={maskPnl} />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  // ── Mobile: bottom sheet (unchanged) ─────────────────────────────────────────
+  if (isMobile) {
+    return (
+      <Sheet open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+        <SheetContent
+          side='bottom'
+          className='border-t p-0 max-h-[88dvh] overflow-hidden flex flex-col'
+          style={{
+            background: '#1a1a1f',
+            borderColor: 'rgba(255,255,255,0.08)',
+            borderTopLeftRadius: 24,
+            borderTopRightRadius: 24,
+          }}
+        >
+          {/* Grab handle */}
+          <div className='flex justify-center pt-3 pb-1'>
+            <div className='w-10 h-1 rounded-full' style={{ background: 'rgba(255,255,255,0.18)' }} />
+          </div>
+          {profileBody}
+        </SheetContent>
+      </Sheet>
+    );
+  }
+
+  // ── Desktop: centered frosted-glass modal ─────────────────────────────────────
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogPortal>
+        <DialogOverlay />
+        <DialogPrimitive.Content
+          className='fixed left-[50%] top-[50%] z-50 translate-x-[-50%] translate-y-[-50%] p-0 overflow-hidden flex flex-col outline-none focus:outline-none duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%]'
+          style={{
+            background: 'hsl(270 45% 9% / 0.92)',
+            backdropFilter: 'blur(24px)',
+            WebkitBackdropFilter: 'blur(24px)',
+            border: '1px solid rgba(255,255,255,0.08)',
+            borderRadius: 20,
+            width: '100%',
+            maxWidth: 480,
+            maxHeight: '85dvh',
+          }}
+        >
+          {/* Desktop close button in top-right corner */}
+          <DialogClose asChild>
+            <button
+              onClick={onClose}
+              className='absolute top-3.5 right-3.5 z-10 flex items-center justify-center w-8 h-8 rounded-full transition-colors'
+              style={{ background: 'rgba(255,255,255,0.07)', color: '#8A8A9A', border: '1px solid rgba(255,255,255,0.1)' }}
+              aria-label='Close'
+            >
+              <X size={14} />
+            </button>
+          </DialogClose>
+          {/* Small top spacer to give the close button visual breathing room */}
+          <div className='pt-3' />
+          {profileBody}
+        </DialogPrimitive.Content>
+      </DialogPortal>
+    </Dialog>
   );
 }

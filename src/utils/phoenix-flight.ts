@@ -34,8 +34,20 @@ import {
   MessageV0,
 } from '@solana/web3.js';
 import { signAndSubmitTransaction } from '@pooflabs/web';
-import { createPhoenixClient, Side } from '@ellipsis-labs/rise';
-import type { PhoenixClientConfig, Authority } from '@ellipsis-labs/rise';
+import {
+  createPhoenixClient,
+  Side,
+  Direction,
+  StopLossOrderKind,
+  ticks,
+  priceUsdToTicks,
+  decodeConditionalOrderCollection,
+} from '@ellipsis-labs/rise';
+import type {
+  PhoenixClientConfig,
+  Authority,
+  TriggerOrderParams,
+} from '@ellipsis-labs/rise';
 import {
   PHOENIX_API_BASE_URL,
   PHOENIX_BUILDER_AUTHORITY,
@@ -519,4 +531,346 @@ export async function placeIsolatedOrderViaFlight(
   const txSignature = await submitFlightTransaction(walletAddress, v1Instructions);
 
   return { txSignature };
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// SL/TP CONDITIONAL (TRIGGER) ORDERS — on-chain, Flight-wrapped
+// ════════════════════════════════════════════════════════════════════════════
+//
+// Phoenix supports POSITION-LEVEL conditional orders: a single conditional-order
+// record per (trader-subaccount, asset) that carries up to two trigger legs — a
+// "greater" leg (fires when mark rises above its trigger) and a "less" leg (fires
+// when mark falls below its trigger). For a perp position, take-profit and
+// stop-loss map onto these two legs based on the position side:
+//
+//   LONG  position: TP = price ABOVE entry  → GREATER leg ; SL = price BELOW → LESS leg
+//   SHORT position: TP = price BELOW entry  → LESS leg    ; SL = price ABOVE → GREATER leg
+//
+// In all cases the trigger CLOSES the position, so the trade side of the trigger
+// order is the OPPOSITE of the position side (long closes by selling = Ask;
+// short closes by buying = Bid).
+//
+// `placePositionConditionalOrder` with `sizePercent: 100` REPLACES the position's
+// conditional record in a single instruction (cancel + replace semantics — no
+// stacking), so "edit SL/TP" and "clear one side" are both just a re-place with
+// the desired legs (pass `null` for a leg to remove it). Clearing BOTH legs is a
+// re-place with both legs null. The instruction requires a ConditionalOrders
+// account to exist for the trader subaccount; we prepend a create-account
+// instruction in the same tx when it is missing.
+
+/** A trigger price the user has entered, in USD. null/undefined = no trigger on that line. */
+export interface ConditionalTriggerInput {
+  /** Stop-loss trigger price in USD, or null to clear. */
+  stopLossUsd?: number | null;
+  /** Take-profit trigger price in USD, or null to clear. */
+  takeProfitUsd?: number | null;
+}
+
+export interface PlaceConditionalOrdersViaFlightParams {
+  /** The wallet public key string of the trader (authority). */
+  walletAddress: string;
+  /** The Phoenix symbol e.g. "SOL-PERP" (suffix stripped internally). */
+  symbol: string;
+  /** Position side: 'long' or 'short' — determines which leg SL/TP map onto. */
+  positionSide: 'long' | 'short';
+  /** Desired trigger prices in USD (null clears that side). */
+  triggers: ConditionalTriggerInput;
+  /** Trader subaccount index (0 = cross margin, >0 = isolated). */
+  traderSubaccountIndex?: number;
+}
+
+/**
+ * Convert a USD price to Phoenix Ticks for a given market.
+ * Reads the market's tickSize / baseLotsDecimals from the orderbook header
+ * (exposed via client.rpc) so the conversion matches the on-chain encoding.
+ */
+async function usdToTicksForMarket(
+  client: ReturnType<typeof createFlightClient>,
+  bareSymbol: string,
+  priceUsd: number,
+) {
+  const header = await client.rpc.markets.getOrderbookHeader(bareSymbol as never);
+  const tickStr = priceUsdToTicks(priceUsd, {
+    baseLotsDecimals: header.baseLotsDecimals,
+    tickSizeInQuoteLotsPerBaseLot: Number(header.tickSizeInQuoteLotsPerBaseLot),
+  });
+  return ticks(tickStr);
+}
+
+/**
+ * Place (or replace) the position's stop-loss / take-profit trigger orders
+ * on-chain via the Rise SDK, Flight-wrapped so the app earns the builder fee.
+ *
+ * Cancel + replace semantics: this REPLACES the whole conditional record for the
+ * position, so editing an existing SL/TP or clearing one side is handled by
+ * passing the new desired prices (null clears a side). If BOTH sides are null,
+ * use `clearConditionalOrdersViaFlight` instead (a no-leg replace would be a
+ * no-op record).
+ *
+ * Handles both cross (subaccountIndex 0) and isolated (>0) positions via
+ * `traderSubaccountIndex`.
+ */
+export async function placeConditionalOrdersViaFlight(
+  params: PlaceConditionalOrdersViaFlightParams,
+): Promise<PlaceOrderViaFlightResult> {
+  const {
+    walletAddress,
+    symbol,
+    positionSide,
+    triggers,
+    traderSubaccountIndex = 0,
+  } = params;
+
+  const bareSymbol = symbol.replace(/-PERP$/i, '');
+  const client = createFlightClient();
+
+  // The trigger order CLOSES the position → trade side is the opposite of the
+  // position side (long closes by selling = Ask; short closes by buying = Bid).
+  const closeSide = positionSide === 'long' ? Side.Ask : Side.Bid;
+
+  // Map SL/TP onto the greater/less legs by position side.
+  //   LONG : TP = above (greater), SL = below (less)
+  //   SHORT: TP = below (less),    SL = above (greater)
+  const tpUsd = triggers.takeProfitUsd ?? null;
+  const slUsd = triggers.stopLossUsd ?? null;
+
+  let greaterUsd: number | null = null;
+  let lessUsd: number | null = null;
+  if (positionSide === 'long') {
+    greaterUsd = tpUsd; // take-profit above
+    lessUsd = slUsd;    // stop-loss below
+  } else {
+    greaterUsd = slUsd; // stop-loss above
+    lessUsd = tpUsd;    // take-profit below
+  }
+
+  const buildLeg = async (
+    triggerUsd: number | null,
+    direction: Direction,
+  ): Promise<TriggerOrderParams | null> => {
+    if (triggerUsd == null || !(triggerUsd > 0)) return null;
+    const triggerTicks = await usdToTicksForMarket(client, bareSymbol, triggerUsd);
+    return {
+      triggerDirection: direction,
+      tradeSide: closeSide,
+      orderKind: StopLossOrderKind.IOC, // market-close the position when triggered
+      triggerPrice: triggerTicks,
+      // Execution at the trigger price (IOC sweeps the book from there).
+      executionPrice: triggerTicks,
+    };
+  };
+
+  const greaterTriggerOrder = await buildLeg(greaterUsd, Direction.GreaterThan);
+  const lessTriggerOrder = await buildLeg(lessUsd, Direction.LessThan);
+
+  // Ensure the trader's ConditionalOrders account exists; prepend a create-account
+  // instruction in the SAME tx when missing.
+  const v1Instructions: TransactionInstruction[] = [];
+  const createIx = await maybeBuildCreateConditionalOrdersAccountIx(
+    client,
+    walletAddress,
+    traderSubaccountIndex,
+  );
+  if (createIx) v1Instructions.push(createIx);
+
+  // Build the position-level conditional order instruction (Flight-wrapped via
+  // the client's defaultFlight routing). sizePercent:100 closes the full position.
+  const ix = (await client.ixs.placePositionConditionalOrder({
+    authority: walletAddress as Authority,
+    symbol: bareSymbol as never,
+    greaterTriggerOrder,
+    lessTriggerOrder,
+    sizePercent: 100,
+    traderSubaccountIndex,
+  })) as {
+    programAddress: string;
+    accounts: readonly { address: string; role: number }[];
+    data: ArrayLike<number>;
+  };
+
+  v1Instructions.push(bridgeV2Instruction(ix));
+
+  const txSignature = await submitFlightTransaction(walletAddress, v1Instructions);
+  return { txSignature };
+}
+
+/**
+ * Clear BOTH the stop-loss and take-profit trigger orders for a position by
+ * replacing its conditional record with no active legs. Flight-wrapped.
+ */
+export async function clearConditionalOrdersViaFlight(params: {
+  walletAddress: string;
+  symbol: string;
+  traderSubaccountIndex?: number;
+}): Promise<PlaceOrderViaFlightResult> {
+  const { walletAddress, symbol, traderSubaccountIndex = 0 } = params;
+  const bareSymbol = symbol.replace(/-PERP$/i, '');
+  const client = createFlightClient();
+
+  const v1Instructions: TransactionInstruction[] = [];
+  const createIx = await maybeBuildCreateConditionalOrdersAccountIx(
+    client,
+    walletAddress,
+    traderSubaccountIndex,
+  );
+  if (createIx) v1Instructions.push(createIx);
+
+  const ix = (await client.ixs.placePositionConditionalOrder({
+    authority: walletAddress as Authority,
+    symbol: bareSymbol as never,
+    greaterTriggerOrder: null,
+    lessTriggerOrder: null,
+    sizePercent: 100,
+    traderSubaccountIndex,
+  })) as {
+    programAddress: string;
+    accounts: readonly { address: string; role: number }[];
+    data: ArrayLike<number>;
+  };
+
+  v1Instructions.push(bridgeV2Instruction(ix));
+
+  const txSignature = await submitFlightTransaction(walletAddress, v1Instructions);
+  return { txSignature };
+}
+
+/**
+ * Derive the trader's ConditionalOrders PDA and, if the account does not yet
+ * exist on-chain, return a create-account v1 instruction to prepend. Returns
+ * null when the account already exists.
+ */
+async function maybeBuildCreateConditionalOrdersAccountIx(
+  client: ReturnType<typeof createFlightClient>,
+  walletAddress: string,
+  traderSubaccountIndex: number,
+): Promise<TransactionInstruction | null> {
+  const condAddress = await deriveConditionalOrdersAddress(
+    client,
+    walletAddress,
+    traderSubaccountIndex,
+  );
+
+  // Check existence by attempting to fetch the raw account. A throw (or empty
+  // data) means the account is not initialized yet.
+  let exists = false;
+  try {
+    const acct = await client.rpc.accounts.fetchAccount(condAddress);
+    exists = !!acct?.data && acct.data.length > 0;
+  } catch {
+    exists = false;
+  }
+  if (exists) return null;
+
+  const createIx = (await client.ixs.buildCreateConditionalOrdersAccount({
+    authority: walletAddress as Authority,
+    traderSubaccountIndex,
+  })) as {
+    programAddress: string;
+    accounts: readonly { address: string; role: number }[];
+    data: ArrayLike<number>;
+  };
+  return bridgeV2Instruction(createIx);
+}
+
+/** Derive the ConditionalOrders PDA address for a trader subaccount. */
+async function deriveConditionalOrdersAddress(
+  client: ReturnType<typeof createFlightClient>,
+  walletAddress: string,
+  traderSubaccountIndex: number,
+) {
+  const traderAccount = await client.pda.getTraderAddress({
+    authority: walletAddress as Authority,
+    traderPdaIndex: 0, // parent Trader is always registered at index 0
+    subaccountIndex: traderSubaccountIndex,
+  });
+  return client.pda.getConditionalOrdersAddress({ traderAccount });
+}
+
+export interface ActiveConditionalTriggers {
+  stopLossUsd: number | null;
+  takeProfitUsd: number | null;
+}
+
+/**
+ * Read back the position's currently-active on-chain SL/TP trigger prices (USD).
+ *
+ * Fetches and decodes the trader's ConditionalOrderCollection, finds the active
+ * conditional order for this market's assetId, and converts the active legs'
+ * trigger ticks back to USD using the market's tick params. Maps the greater/less
+ * legs onto SL/TP by position side (inverse of the placement mapping).
+ *
+ * Returns { stopLossUsd: null, takeProfitUsd: null } when there is no
+ * conditional-order account, no matching order, or the legs are inactive — so
+ * callers can render "no trigger set" without special-casing the absent account.
+ */
+export async function readActiveConditionalTriggers(params: {
+  walletAddress: string;
+  symbol: string;
+  positionSide: 'long' | 'short';
+  traderSubaccountIndex?: number;
+}): Promise<ActiveConditionalTriggers> {
+  const { walletAddress, symbol, positionSide, traderSubaccountIndex = 0 } = params;
+  const bareSymbol = symbol.replace(/-PERP$/i, '');
+  const client = createFlightClient();
+
+  const empty: ActiveConditionalTriggers = { stopLossUsd: null, takeProfitUsd: null };
+
+  let collection;
+  try {
+    const condAddress = await deriveConditionalOrdersAddress(
+      client,
+      walletAddress,
+      traderSubaccountIndex,
+    );
+    const acct = await client.rpc.accounts.fetchAccount(condAddress);
+    if (!acct?.data || acct.data.length === 0) return empty;
+    collection = decodeConditionalOrderCollection(acct.data);
+  } catch {
+    return empty;
+  }
+
+  // Resolve this market's assetId + tick params from the orderbook header.
+  let header;
+  try {
+    header = await client.rpc.markets.getOrderbookHeader(bareSymbol as never);
+  } catch {
+    return empty;
+  }
+  const assetId = header.assetId;
+  const tickSize = Number(header.tickSizeInQuoteLotsPerBaseLot);
+  const baseLotsDecimals = header.baseLotsDecimals;
+
+  // Ticks → USD: invert priceUsdToTicks. price = ticks * tickSize / 10^baseLotsDecimals
+  // (priceUsdToTicks computes ticks = round(priceUsd * 10^baseLotsDecimals / tickSize)).
+  const ticksToUsd = (t: bigint): number => {
+    if (tickSize <= 0) return 0;
+    return (Number(t) * tickSize) / Math.pow(10, baseLotsDecimals);
+  };
+
+  // Find the active conditional order for this asset.
+  const order = collection.orders.find(
+    (o) => o.assetId === assetId && o.isActive,
+  );
+  if (!order) return empty;
+
+  const greaterUsd = order.greaterTriggerOrder?.isActive
+    ? ticksToUsd(order.greaterTriggerOrder.triggerPrice as unknown as bigint)
+    : null;
+  const lessUsd = order.lessTriggerOrder?.isActive
+    ? ticksToUsd(order.lessTriggerOrder.triggerPrice as unknown as bigint)
+    : null;
+
+  // Inverse of the placement mapping:
+  //   LONG : greater = TP, less = SL
+  //   SHORT: greater = SL, less = TP
+  if (positionSide === 'long') {
+    return {
+      takeProfitUsd: greaterUsd && greaterUsd > 0 ? greaterUsd : null,
+      stopLossUsd: lessUsd && lessUsd > 0 ? lessUsd : null,
+    };
+  }
+  return {
+    stopLossUsd: greaterUsd && greaterUsd > 0 ? greaterUsd : null,
+    takeProfitUsd: lessUsd && lessUsd > 0 ? lessUsd : null,
+  };
 }

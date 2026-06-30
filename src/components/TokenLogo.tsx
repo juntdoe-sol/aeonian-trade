@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { getTokenColor, getFallbackLogoUrl, getTokenLogoUrl } from '@/utils/token-logos';
 
 interface TokenLogoProps {
@@ -16,6 +16,12 @@ interface TokenLogoProps {
 export function TokenLogo({ symbol, size = 24, className = '' }: TokenLogoProps) {
   // 0 = try primary, 1 = try generic fallback, 2 = show letter avatar
   const [stage, setStage] = useState<0 | 1 | 2>(0);
+
+  // Reset stage when the symbol prop changes so a corrected symbol
+  // (e.g. truncated mint → "SKR") re-attempts the proper logo URL.
+  useEffect(() => {
+    setStage(0);
+  }, [symbol]);
 
   const base = symbol.replace(/-PERP$/i, '').toUpperCase();
   const letter = base.charAt(0);

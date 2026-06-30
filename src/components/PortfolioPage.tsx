@@ -5,7 +5,7 @@ import { useAppLogo } from '@/hooks/use-app-logo';
 import { phoenixDeposit, phoenixWithdraw } from '@/utils/phoenix-client';
 import { useAuth } from '@pooflabs/web';
 import { truncateAddress } from '@/utils/format-address';
-import { AlertTriangle, ArrowDownToLine, ArrowUpFromLine, ArrowDownUp, Check, ChevronDown, Copy, Eye, Heart, Loader2, RefreshCw, Send, Settings, Wallet, X } from 'lucide-react';
+import { AlertTriangle, ArrowDownToLine, ArrowUpFromLine, ArrowDownUp, Check, ChevronDown, Copy, Eye, Heart, Loader2, RefreshCw, Send, Settings, Volume2, VolumeX, Wallet, X } from 'lucide-react';
 import { useRealtimeData } from '@/hooks/use-realtime-data';
 import { subscribeSocialLinks, type SocialLinksResponse } from '@/lib/collections/socialLinks';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
@@ -13,6 +13,7 @@ import { useOAuth } from '@/contexts/OAuthContext';
 import { setSolTransfer } from '@/lib/collections/solTransfer';
 import { runSolBalanceQueryForCommonQueries } from '@/lib/collections/commonQueries';
 import { getLeaderboardPrivacy, updateLeaderboardPrivacy } from '@/lib/collections/leaderboardPrivacy';
+import { useSoundStore } from '@/utils/sound';
 import { Address, Time } from '@/lib/db-client';
 import { Switch } from '@/components/ui/switch';
 import { QRCodeSVG } from 'qrcode.react';
@@ -57,6 +58,8 @@ import { getMarketPubkey, toBaseLots } from '@/utils/phoenix-markets';
 import { captureConsoleErrorDuring, buildIsoErrorMessage } from '@/utils/iso-error-diagnostic';
 import { placeOrderViaFlight, placeIsolatedOrderViaFlight, Side } from '@/utils/phoenix-flight';
 import { recordFlightTrade } from '@/utils/record-trade';
+import { celebrate } from '@/utils/celebrate';
+import { isDraftEnv, MOCK_DRAFT_POSITION } from '@/utils/draft-mock-position';
 
 // ─── Swap Tab ─────────────────────────────────────────────────────────────────
 
@@ -822,7 +825,7 @@ function FundWalletCard({ walletAddress }: { walletAddress: string }) {
   return (
     <>
       <div
-        className='mt-3 rounded-xl overflow-hidden'
+        className='mt-3 rounded-xl overflow-hidden phantom-fund-card'
         style={{ background: 'rgba(183,148,246,0.06)', border: '1px solid rgba(183,148,246,0.15)' }}
       >
         {/* Mobile: collapsible header */}
@@ -852,10 +855,31 @@ function FundWalletCard({ walletAddress }: { walletAddress: string }) {
         </div>
 
         {/* Desktop: always expanded */}
-        <div className='hidden md:block p-3'>
-          <div className='mb-1'>{cardTitleRow}</div>
-          <p className='text-[10px] mb-2' style={{ color: '#666' }}>Your fund wallet is your connected wallet.</p>
-          {tabsContent}
+        <div className='hidden md:block'>
+          {/* Desktop balance hero — matches "Total Portfolio Value" treatment */}
+          <div className='px-4 pt-4 pb-3' style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+            <div className='text-xs mb-3' style={{ color: '#8A8A8A' }}>Fund Wallet</div>
+            <div className='grid grid-cols-2 gap-4'>
+              <div>
+                <div className='text-xs mb-1' style={{ color: '#8A8A8A' }}>SOL Balance</div>
+                <div className='text-3xl font-bold tabular-nums' style={{ color: '#b794f6' }}>
+                  {fundBalancesLoading ? '…' : (fundSolBalance !== null ? fundSolBalance.toFixed(3) : '0.000')}
+                </div>
+                <div className='text-xs mt-0.5 font-medium' style={{ color: '#555' }}>SOL</div>
+              </div>
+              <div>
+                <div className='text-xs mb-1' style={{ color: '#8A8A8A' }}>USDC Balance</div>
+                <div className='text-3xl font-bold tabular-nums' style={{ color: '#4ADE80' }}>
+                  {fundBalancesLoading ? '…' : (fundUsdcBalance !== null ? fundUsdcBalance.toFixed(2) : '0.00')}
+                </div>
+                <div className='text-xs mt-0.5 font-medium' style={{ color: '#555' }}>USDC</div>
+              </div>
+            </div>
+          </div>
+          <div className='p-3'>
+            <p className='text-[10px] mb-2' style={{ color: '#666' }}>Your fund wallet is your connected wallet.</p>
+            {tabsContent}
+          </div>
         </div>
       </div>
     </>
@@ -1105,7 +1129,7 @@ function SummaryTile({
 }) {
   return (
     <div
-      className='glass-inner rounded-xl p-3 flex flex-col gap-1'
+      className='glass-inner phantom-inner rounded-xl p-3 flex flex-col gap-1'
     >
       <span className='text-[10px] font-medium uppercase tracking-wider truncate' style={{ color: '#555' }}>
         {label}
@@ -1190,7 +1214,7 @@ function BreakdownPanel({ trader }: { trader: TraderData }) {
               </Pie>
               <RechartsTooltip
                 formatter={(value: number) => [formatUsd(value), '']}
-                contentStyle={{ background: 'rgba(12,14,26,0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, fontSize: 12, backdropFilter: 'blur(12px)' }}
+                contentStyle={{ background: '#1a1a1f', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, fontSize: 12 }}
                 labelStyle={{ color: '#8A8A8A' }}
                 itemStyle={{ color: '#FFF' }}
               />
@@ -1257,7 +1281,7 @@ function BreakdownPanel({ trader }: { trader: TraderData }) {
       {/* Per-token breakdown list */}
       {breakdown.slices.length > 0 && (
         <div
-          className='glass-inner rounded-xl overflow-hidden'
+          className='glass-inner phantom-inner rounded-xl overflow-hidden'
         >
           <div className='px-3 py-2' style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
             <span className='text-[10px] font-semibold uppercase tracking-wider' style={{ color: '#555' }}>
@@ -1364,7 +1388,7 @@ function SummaryPanel({
   const healthColor = healthPct >= 50 ? '#4ADE80' : healthPct >= 20 ? '#FACC15' : '#FF5252';
 
   return (
-    <div className='glass-card rounded-xl overflow-hidden'>
+    <div className='glass-card phantom-card rounded-xl overflow-hidden'>
       {/* Tab strip */}
       <div className='flex' style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
         <button
@@ -1476,7 +1500,7 @@ function SummaryPanel({
           )}
 
           {/* Position Health */}
-          <div className='glass-inner rounded-xl p-3 space-y-2'>
+          <div className='glass-inner phantom-inner rounded-xl p-3 space-y-2'>
             <div className='flex items-center justify-between'>
               <div className='flex items-center gap-2'>
                 <Heart size={13} style={{ color: healthColor }} />
@@ -1524,6 +1548,7 @@ function SummaryPanel({
 function ProfileSettingsSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const { connect, disconnect, loading } = useOAuth();
   const { user } = useAuth();
+  const { enabled: soundEnabled, setEnabled: setSoundEnabled } = useSoundStore();
 
   // Subscribe directly to the current user's social link doc (same key pattern used by
   // the leaderboard and share cards). This is the authoritative source — the OAuth context's
@@ -1692,6 +1717,25 @@ function ProfileSettingsSheet({ open, onOpenChange }: { open: boolean; onOpenCha
             </button>
           </div>
         )}
+
+        {/* Sound effects toggle */}
+        <div className='mt-4 rounded-xl p-4' style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+          <div className='flex items-center justify-between gap-4'>
+            <div className='flex items-center gap-3 flex-1 min-w-0'>
+              {soundEnabled
+                ? <Volume2 size={16} style={{ color: '#b794f6', flexShrink: 0 }} />
+                : <VolumeX size={16} style={{ color: '#8A8A8A', flexShrink: 0 }} />}
+              <div className='flex-1 min-w-0'>
+                <div className='font-semibold text-sm' style={{ color: '#E5E5E5' }}>Sound effects</div>
+                <div className='text-xs mt-0.5' style={{ color: '#8A8A8A' }}>Subtle audio feedback for button clicks and win celebrations.</div>
+              </div>
+            </div>
+            <Switch
+              checked={soundEnabled}
+              onCheckedChange={setSoundEnabled}
+            />
+          </div>
+        </div>
       </SheetContent>
 
       {/* Read-only preview of the trader's own profile as other viewers see it
@@ -1738,6 +1782,23 @@ export function PortfolioPage() {
 
   const handleClosePosition = useCallback(async (pos: TraderPosition) => {
     if (!user?.address) { errorToast('Log in to close positions.'); return; }
+
+    // Snapshot PnL immediately (before any async work) so we use the value the
+    // user saw at click time, not a potentially-stale reactive value that may
+    // have flickered to 0 by the time the close resolves.
+    const snapshotPnl = pos.pnl ?? 0;
+
+    // Draft-only: short-circuit for the injected test position.
+    if (isDraftEnv && pos._isMockDraftPosition) {
+      toast.success('Test position closed. (draft only)');
+      if (snapshotPnl > 0) celebrate(snapshotPnl, pos.symbol);
+      setTrader((prev) => {
+        if (!prev) return prev;
+        return { ...prev, positions: prev.positions.filter((p) => !p._isMockDraftPosition) };
+      });
+      return;
+    }
+
     const posSymbol = pos.symbol ?? 'SOL-PERP';
     const marketPubkey = getMarketPubkey(posSymbol);
     if (!marketPubkey) { errorToast(`This market isn't available right now: ${posSymbol}.`); return; }
@@ -1891,6 +1952,7 @@ export function PortfolioPage() {
       }
 
       toast.success('Position closed.');
+      if (snapshotPnl > 0) celebrate(snapshotPnl, pos.symbol);
       fetchTrader();
 
       // For isolated PARTIAL closes, sweep the freed collateral back to the main wallet
@@ -1971,6 +2033,28 @@ export function PortfolioPage() {
       setErrorMsg(msg);
     } finally {
       setLoading(false);
+    }
+    // Draft-only: inject a fake profitable position so the win-celebration flow
+    // can be tested on Poofnet where the live Phoenix API is unreachable.
+    if (isDraftEnv) {
+      setTrader((prev) => {
+        const positions = prev?.positions ?? [];
+        const alreadyHasMock = positions.some((p) => p._isMockDraftPosition);
+        if (alreadyHasMock) return prev;
+        const mockPositions = [...positions, MOCK_DRAFT_POSITION];
+        if (prev) {
+          return { ...prev, positions: mockPositions };
+        }
+        return {
+          collateralBalance:                 { value: 0, decimals: 6, ui: '0' },
+          effectiveCollateral:               { value: 0, decimals: 6, ui: '0' },
+          effectiveCollateralForWithdrawals: { value: 0, decimals: 6, ui: '0' },
+          unrealizedPnl:                     { value: 0, decimals: 6, ui: '0' },
+          portfolioValue:                    { value: 0, decimals: 6, ui: '0' },
+          positions: mockPositions,
+          limitOrders: {},
+        } satisfies TraderData;
+      });
     }
   }
 
@@ -2076,7 +2160,7 @@ export function PortfolioPage() {
           <p className='text-sm text-center' style={{ color: '#8A8A8A' }}>
             Log in to view your portfolio.
           </p>
-          <button onClick={login} className='w-full max-w-xs py-3.5 rounded-xl font-bold text-sm' style={{ background: '#b794f6', color: '#fff' }}>
+          <button onClick={() => login()} className='w-full max-w-xs py-3.5 rounded-xl font-bold text-sm' style={{ background: '#b794f6', color: '#fff' }}>
             Log In
           </button>
         </div>
@@ -2092,15 +2176,20 @@ export function PortfolioPage() {
 
       {/* Page sub-header */}
       <div className='px-4 pt-4 pb-3' style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-        <h1 className='font-bold text-xl'>Account</h1>
+        {/* Title: "Portfolio" on desktop, "Account" on mobile */}
+        <h1 className='font-bold text-xl md:hidden'>Account</h1>
+        <h1 className='font-bold text-xl hidden md:block'>Portfolio</h1>
+        {/* Button row: mobile shows Disconnect + Settings; desktop shows only Settings */}
         <div className='flex items-center justify-between mt-1'>
           <button
             onClick={logout}
-            className='text-xs font-semibold px-3 py-1.5 rounded-md transition-all hover:brightness-110 min-h-[36px]'
+            className='md:hidden text-xs font-semibold px-3 py-1.5 rounded-md transition-all hover:brightness-110 min-h-[36px]'
             style={{ background: 'rgba(138,138,138,0.12)', color: '#8A8A8A', border: '1px solid rgba(138,138,138,0.2)' }}
           >
             Disconnect
           </button>
+          {/* Spacer on desktop so Settings aligns to the right */}
+          <span className='hidden md:block' />
           <button
             onClick={() => setProfileSettingsOpen(true)}
             className='flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-md transition-all hover:brightness-110 min-h-[36px]'
@@ -2112,8 +2201,10 @@ export function PortfolioPage() {
         </div>
         <ProfileSettingsSheet open={profileSettingsOpen} onOpenChange={setProfileSettingsOpen} />
 
-        {/* QR code + funding guidance */}
-        <FundWalletCard walletAddress={user.address} />
+        {/* Fund Wallet card — mobile only (desktop renders alongside portfolio value below) */}
+        <div className='md:hidden'>
+          <FundWalletCard walletAddress={user.address} />
+        </div>
       </div>
 
       <div className='px-4 pt-4 space-y-4'>
@@ -2125,7 +2216,7 @@ export function PortfolioPage() {
           </div>
         ) : errorMsg ? (
           <div
-            className='glass-card rounded-xl p-5 text-center space-y-3'
+            className='glass-card phantom-card rounded-xl p-5 text-center space-y-3'
           >
             <AlertTriangle size={28} style={{ color: '#b794f6', margin: '0 auto' }} />
             <h2 className='font-bold text-base'>Could not load portfolio</h2>
@@ -2140,19 +2231,18 @@ export function PortfolioPage() {
           </div>
         ) : notFound ? (
           <div
-            className='glass-card rounded-xl p-5 text-center space-y-3'
+            className='glass-card phantom-card rounded-xl p-5 text-center space-y-3'
           >
-            <div className='text-3xl'>🔥</div>
-            <h2 className='font-bold text-base'>Phoenix Account Not Found</h2>
+            <h2 className='font-bold text-base'>Trading Account Not Found</h2>
             <p className='text-sm' style={{ color: '#8A8A8A' }}>
-              No Phoenix trading account was found for this wallet. Activate your account to start trading.
+              No trading account was found for this wallet. Activate your account to start trading.
             </p>
             <button
               onClick={() => setActivateOpen(true)}
               className='w-full py-3.5 rounded-xl font-bold text-sm transition-all'
               style={{ background: '#b794f6', color: '#fff' }}
             >
-              Activate Phoenix Account
+              Activate Trading Account
             </button>
             <ActiveAccountFlow
               open={activateOpen}
@@ -2165,11 +2255,10 @@ export function PortfolioPage() {
           </div>
         ) : liveDataUnavailable ? (
           <div
-            className='glass-card rounded-xl overflow-hidden'
+            className='glass-card phantom-card rounded-xl overflow-hidden'
           >
             <div className='p-5 space-y-1'>
               <div className='flex items-center gap-2.5'>
-                <div className='text-2xl'>🔥</div>
                 <div>
                   <h2 className='font-bold text-base'>Account Registered</h2>
                   <p className='text-xs mt-0.5' style={{ color: '#8A8A8A' }}>
@@ -2200,159 +2289,190 @@ export function PortfolioPage() {
           </div>
         ) : trader ? (
           <>
-            {/* ─── PNL Summary Card ─────────────────────────────────────────── */}
-            {(() => {
-              const collateral = toNumber(trader.collateralBalance);
-              const crossIM = trader.crossInitialMargin
-                ? toNumber(trader.crossInitialMargin)
-                : (Array.isArray(trader.positions) ? trader.positions : []).reduce((s: number, p: RisePosition) => s + toNumber(p.initialMargin), 0);
-              const freeCollateral = Math.max(0, collateral - crossIM);
-              const unrealizedPnl = toNumber(trader.unrealizedPnl);
-              const totalValue = toNumber(trader.portfolioValue) || (collateral + unrealizedPnl);
-              const pnlPositive = unrealizedPnl >= 0;
-              const pnlPct = collateral > 0 ? (unrealizedPnl / collateral) * 100 : 0;
+            {/* ─── Desktop 2-col: Total Portfolio Value (left) + Fund Wallet (right) ── */}
+            {/* On mobile: single column — PNL card first, Fund Wallet card hidden here
+                (it's already rendered in the sub-header above via the md:hidden wrapper).
+                On desktop (md+): 2-col grid, Fund Wallet shown here only. */}
+            <div className='grid grid-cols-1 md:grid-cols-2 md:gap-4 md:items-start'>
+              {/* LEFT: PNL Summary Card ─────────────────────────────────────── */}
+              {(() => {
+                const collateral = toNumber(trader.collateralBalance);
+                const crossIM = trader.crossInitialMargin
+                  ? toNumber(trader.crossInitialMargin)
+                  : (Array.isArray(trader.positions) ? trader.positions : []).reduce((s: number, p: RisePosition) => s + toNumber(p.initialMargin), 0);
+                const freeCollateral = Math.max(0, collateral - crossIM);
+                const unrealizedPnl = toNumber(trader.unrealizedPnl);
+                const totalValue = toNumber(trader.portfolioValue) || (collateral + unrealizedPnl);
+                const pnlPositive = unrealizedPnl >= 0;
+                const pnlPct = collateral > 0 ? (unrealizedPnl / collateral) * 100 : 0;
 
-              return (
-                <div
-                  className='glass-card rounded-xl overflow-hidden'
-                >
-                  {/* Top: total portfolio value */}
-                  <div className='px-4 pt-4 pb-3' style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-                    <div className='text-xs mb-1' style={{ color: '#8A8A8A' }}>Total Portfolio Value</div>
-                    <div className='text-3xl font-bold tabular-nums'>{formatUsd(totalValue)}</div>
-                    {/* PNL badge */}
-                    <div className='flex items-center gap-2 mt-1.5'>
-                      <span
-                        className='text-sm font-bold tabular-nums px-2 py-0.5 rounded-md'
-                        style={{
-                          background: pnlPositive ? 'rgba(74,222,128,0.12)' : 'rgba(255,82,82,0.12)',
-                          color: pnlPositive ? '#4ADE80' : '#FF5252',
-                        }}
+                return (
+                  <div
+                    className='glass-card phantom-card rounded-xl overflow-hidden'
+                  >
+                    {/* Top: total portfolio value */}
+                    <div className='px-4 pt-4 pb-3' style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                      <div className='text-xs mb-1' style={{ color: '#8A8A8A' }}>Total Portfolio Value</div>
+                      <div className='text-3xl font-bold tabular-nums'>{formatUsd(totalValue)}</div>
+                      {/* PNL badge */}
+                      <div className='flex items-center gap-2 mt-1.5'>
+                        <span
+                          className='text-sm font-bold tabular-nums px-2 py-0.5 rounded-md'
+                          style={{
+                            background: pnlPositive ? 'rgba(74,222,128,0.12)' : 'rgba(255,82,82,0.12)',
+                            color: pnlPositive ? '#4ADE80' : '#FF5252',
+                          }}
+                        >
+                          {pnlPositive ? '+' : ''}{formatUsd(unrealizedPnl)}
+                        </span>
+                        <span
+                          className='text-xs tabular-nums font-medium'
+                          style={{ color: pnlPositive ? '#4ADE80' : '#FF5252' }}
+                        >
+                          ({pnlPositive ? '+' : ''}{pnlPct.toFixed(2)}%)
+                        </span>
+                        <span className='text-xs' style={{ color: '#555' }}>Unrealized PnL</span>
+                      </div>
+                    </div>
+
+                    {/* Metrics row */}
+                    <div className='grid grid-cols-2 divide-x' style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                      <div className='px-4 py-3'>
+                        <div className='text-xs mb-0.5' style={{ color: '#8A8A8A' }}>Collateral</div>
+                        <div className='font-bold tabular-nums text-sm'>{formatUsd(collateral)}</div>
+                      </div>
+                      <div className='px-4 py-3'>
+                        <div className='text-xs mb-0.5' style={{ color: '#8A8A8A' }}>Withdrawable</div>
+                        <div className='font-bold tabular-nums text-sm' style={{ color: '#4ADE80' }}>{formatUsd(freeCollateral)}</div>
+                      </div>
+                    </div>
+
+                    {/* Deposit / Withdraw buttons */}
+                    <div className='flex gap-2 p-3'>
+                      <button
+                        onClick={() => setShowDeposit(true)}
+                        className='flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-bold transition-all'
+                        style={{ background: '#b794f6', color: '#fff' }}
                       >
-                        {pnlPositive ? '+' : ''}{formatUsd(unrealizedPnl)}
-                      </span>
-                      <span
-                        className='text-xs tabular-nums font-medium'
-                        style={{ color: pnlPositive ? '#4ADE80' : '#FF5252' }}
+                        <ArrowDownToLine size={13} />
+                        Deposit
+                      </button>
+                      <button
+                        onClick={() => setShowWithdraw(true)}
+                        className='flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-bold transition-all glass-button phantom-button'
+                        style={{ color: '#FFF' }}
                       >
-                        ({pnlPositive ? '+' : ''}{pnlPct.toFixed(2)}%)
-                      </span>
-                      <span className='text-xs' style={{ color: '#555' }}>Unrealized PnL</span>
+                        <ArrowUpFromLine size={13} />
+                        Withdraw
+                      </button>
                     </div>
                   </div>
+                );
+              })()}
 
-                  {/* Metrics row */}
-                  <div className='grid grid-cols-2 divide-x' style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-                    <div className='px-4 py-3'>
-                      <div className='text-xs mb-0.5' style={{ color: '#8A8A8A' }}>Collateral</div>
-                      <div className='font-bold tabular-nums text-sm'>{formatUsd(collateral)}</div>
-                    </div>
-                    <div className='px-4 py-3'>
-                      <div className='text-xs mb-0.5' style={{ color: '#8A8A8A' }}>Withdrawable</div>
-                      <div className='font-bold tabular-nums text-sm' style={{ color: '#4ADE80' }}>{formatUsd(freeCollateral)}</div>
-                    </div>
-                  </div>
-
-                  {/* Deposit / Withdraw buttons */}
-                  <div className='flex gap-2 p-3'>
-                    <button
-                      onClick={() => setShowDeposit(true)}
-                      className='flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-bold transition-all'
-                      style={{ background: '#b794f6', color: '#fff' }}
-                    >
-                      <ArrowDownToLine size={13} />
-                      Deposit
-                    </button>
-                    <button
-                      onClick={() => setShowWithdraw(true)}
-                      className='flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-bold transition-all glass-button'
-                      style={{ color: '#FFF' }}
-                    >
-                      <ArrowUpFromLine size={13} />
-                      Withdraw
-                    </button>
-                  </div>
-                </div>
-              );
-            })()}
+              {/* RIGHT: Fund Wallet card — desktop only (mobile renders in sub-header above) */}
+              {/* -mt-3 cancels the FundWalletCard's built-in mt-3 so both columns top-align */}
+              <div className='hidden md:block -mt-3'>
+                <FundWalletCard walletAddress={user.address} />
+              </div>
+            </div>
 
             {/* ─── Leftover isolated collateral sweep ──────────────────────── */}
             {/* Shows ONLY when an isolated subaccount has free collateral and no
                 open position — lets the user move idle funds back to cross/main. */}
             {user && <IsolatedSweepCard walletAddress={user.address} onSwept={fetchTrader} />}
 
-            {/* ─── Summary metrics panel ────────────────────────────────────── */}
-            <SummaryPanel trader={trader} historyStats={historyStats} />
+            {/* ─── Desktop 2-col: Summary (left) + Activity tabs (right) ───── */}
+            {/* Mobile: stacked as before. Desktop (md+): side-by-side 40/60 split.
+                items-stretch keeps both columns the same height so the right-side
+                panel never shows a large empty void when there are few positions. */}
+            <div className='grid grid-cols-1 md:grid-cols-2 md:gap-4 md:items-stretch'>
+              {/* LEFT col: Summary metrics + per-position PnL breakdown */}
+              <div className='space-y-4 md:flex md:flex-col min-w-0'>
+                {/* ─── Summary metrics panel ──────────────────────────────── */}
+                <SummaryPanel trader={trader} historyStats={historyStats} />
 
-            {/* ─── Per-position PNL breakdown ───────────────────────────────── */}
-            {(Array.isArray(trader.positions) ? trader.positions : []).length > 0 && (
-              <div className='glass-card rounded-xl overflow-hidden'>
-                <div className='px-4 py-3' style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-                  <h3 className='text-xs font-medium uppercase tracking-wider' style={{ color: '#8A8A8A' }}>
-                    Positions &amp; PnL
-                  </h3>
-                </div>
-                <div className='divide-y' style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
-                  {(Array.isArray(trader.positions) ? trader.positions as RisePosition[] : []).map((rawPos, i) => {
-                    const pos = mapPosition(rawPos);
-                    const isLong = pos.side?.toLowerCase() === 'long';
-                    const pnlPos = (pos.pnl ?? 0) >= 0;
-                    const pnlPctPos = pos.entryPrice && pos.size
-                      ? ((pos.pnl ?? 0) / (pos.entryPrice * pos.size)) * 100
-                      : null;
-                    return (
-                      <div key={i} className='px-4 py-3 flex items-center justify-between'>
-                        <div className='flex items-center gap-2.5'>
-                          <div>
-                            <div className='flex items-center gap-1.5'>
-                              <span className='font-bold text-sm'>{pos.symbol?.replace(/-PERP$/i, '')}</span>
-                              <span
-                                className='text-[10px] font-bold px-1.5 py-0.5 rounded'
-                                style={{
-                                  background: isLong ? 'rgba(74,222,128,0.15)' : 'rgba(255,82,82,0.15)',
-                                  color: isLong ? '#4ADE80' : '#FF5252',
-                                }}
+                {/* ─── Per-position PNL breakdown ─────────────────────────── */}
+                {/* Desktop: shown inline below summary for quick PnL glance.
+                    The positions tab on the right panel is the interactive one;
+                    this card is a read-only summary overview. */}
+                {(Array.isArray(trader.positions) ? trader.positions : []).length > 0 && (
+                  <div className='glass-card phantom-card rounded-xl overflow-hidden'>
+                    <div className='px-4 py-3' style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                      <h3 className='text-xs font-medium uppercase tracking-wider' style={{ color: '#8A8A8A' }}>
+                        Positions &amp; PnL
+                      </h3>
+                    </div>
+                    <div className='divide-y' style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
+                      {(Array.isArray(trader.positions) ? trader.positions as RisePosition[] : []).map((rawPos, i) => {
+                        const pos = mapPosition(rawPos);
+                        const isLong = pos.side?.toLowerCase() === 'long';
+                        const pnlPos = (pos.pnl ?? 0) >= 0;
+                        const pnlPctPos = pos.entryPrice && pos.size
+                          ? ((pos.pnl ?? 0) / (pos.entryPrice * pos.size)) * 100
+                          : null;
+                        return (
+                          <div key={i} className='px-4 py-3 flex items-center justify-between'>
+                            <div className='flex items-center gap-2.5'>
+                              <div>
+                                <div className='flex items-center gap-1.5'>
+                                  <span className='font-bold text-sm'>{pos.symbol?.replace(/-PERP$/i, '')}</span>
+                                  <span
+                                    className='text-[10px] font-bold px-1.5 py-0.5 rounded'
+                                    style={{
+                                      background: isLong ? 'rgba(74,222,128,0.15)' : 'rgba(255,82,82,0.15)',
+                                      color: isLong ? '#4ADE80' : '#FF5252',
+                                    }}
+                                  >
+                                    {pos.side?.toUpperCase()} {pos.leverage != null ? `${pos.leverage}x` : ''}
+                                  </span>
+                                </div>
+                                <div className='text-xs mt-0.5 tabular-nums' style={{ color: '#8A8A8A' }}>
+                                  {pos.size?.toFixed(4) ?? '—'} @ ${pos.entryPrice != null ? formatPrice(pos.entryPrice) : '—'}
+                                </div>
+                              </div>
+                            </div>
+                            <div className='text-right'>
+                              <div
+                                className='font-bold tabular-nums text-sm'
+                                style={{ color: pnlPos ? '#4ADE80' : '#FF5252' }}
                               >
-                                {pos.side?.toUpperCase()} {pos.leverage != null ? `${pos.leverage}x` : ''}
-                              </span>
-                            </div>
-                            <div className='text-xs mt-0.5 tabular-nums' style={{ color: '#8A8A8A' }}>
-                              {pos.size?.toFixed(4) ?? '—'} @ ${pos.entryPrice != null ? formatPrice(pos.entryPrice) : '—'}
+                                {pnlPos ? '+' : ''}{formatUsd(pos.pnl)}
+                              </div>
+                              {pnlPctPos != null && (
+                                <div
+                                  className='text-xs tabular-nums'
+                                  style={{ color: pnlPos ? '#4ADE80' : '#FF5252', opacity: 0.8 }}
+                                >
+                                  {pnlPos ? '+' : ''}{pnlPctPos.toFixed(2)}%
+                                </div>
+                              )}
                             </div>
                           </div>
-                        </div>
-                        <div className='text-right'>
-                          <div
-                            className='font-bold tabular-nums text-sm'
-                            style={{ color: pnlPos ? '#4ADE80' : '#FF5252' }}
-                          >
-                            {pnlPos ? '+' : ''}{formatUsd(pos.pnl)}
-                          </div>
-                          {pnlPctPos != null && (
-                            <div
-                              className='text-xs tabular-nums'
-                              style={{ color: pnlPos ? '#4ADE80' : '#FF5252', opacity: 0.8 }}
-                            >
-                              {pnlPos ? '+' : ''}{pnlPctPos.toFixed(2)}%
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
 
-            {/* Unified activity panel: Positions, Trade History, Order History, Funding History (Orders + Orderbook hidden on portfolio) */}
-            <UserActivityPanel
-              positions={(Array.isArray(trader.positions) ? trader.positions as RisePosition[] : []).map(mapPosition)}
-              parentLoading={loading}
-              onClosePosition={handleClosePosition}
-              closeDisabled={blocked}
-              closingKey={closingKey}
-              hideOrdersAndOrderbook
-            />
+              {/* RIGHT col: Unified activity panel (Positions / History / My Trades / Order Log / Funding).
+                  md:h-full + flex flex-col on the wrapper, md:flex-1 on the panel itself,
+                  ensures the card fills the full column height on desktop — eliminating the
+                  large dead-space void that appears when there are only a few positions.
+                  On mobile (single-column) this has no effect. */}
+              <div className='flex flex-col md:h-full min-w-0'>
+                <UserActivityPanel
+                  positions={(Array.isArray(trader.positions) ? trader.positions as RisePosition[] : []).map(mapPosition)}
+                  parentLoading={loading}
+                  onClosePosition={handleClosePosition}
+                  closeDisabled={blocked}
+                  closingKey={closingKey}
+                  hideOrdersAndOrderbook
+                  className='md:flex-1'
+                />
+              </div>
+            </div>
           </>
         ) : null}
       </div>

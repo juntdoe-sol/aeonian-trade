@@ -15,6 +15,8 @@
 
 import { useMemo, useState } from 'react';
 import { ChevronDown, Trophy } from 'lucide-react';
+import { useDefaultAvatars } from '@/hooks/use-default-avatars';
+import { pickDefaultAvatar } from '@/utils/default-avatar';
 import { useRealtimeData } from '@/hooks/use-realtime-data';
 import {
   subscribeManyMonthlyRewardWinners,
@@ -117,11 +119,13 @@ function WinnerRow({
   row,
   xProfile,
   tokenMeta,
+  defaultAvatarUrls,
   onClick,
 }: {
   row: RankRow;
   xProfile?: XProfile;
   tokenMeta: Map<string, { symbol: string; decimals: number }>;
+  defaultAvatarUrls: string[];
   onClick: () => void;
 }) {
   const meta = RANK_META[row.rank];
@@ -130,6 +134,7 @@ function WinnerRow({
     : row.winner.charAt(0).toUpperCase();
   const displayName = xProfile?.username ? `@${xProfile.username}` : truncateAddress(row.winner);
   const visibleShares = row.shares.filter((s) => s.amount > 0);
+  const defaultAvatar = pickDefaultAvatar(row.winner, defaultAvatarUrls);
 
   return (
     <button
@@ -143,6 +148,13 @@ function WinnerRow({
         <img
           src={xProfile.avatar}
           alt={xProfile.username}
+          className='flex-shrink-0 w-8 h-8 rounded-full object-cover'
+          style={{ border: '1px solid rgba(255,255,255,0.1)' }}
+        />
+      ) : defaultAvatar ? (
+        <img
+          src={defaultAvatar}
+          alt='avatar'
           className='flex-shrink-0 w-8 h-8 rounded-full object-cover'
           style={{ border: '1px solid rgba(255,255,255,0.1)' }}
         />
@@ -189,11 +201,13 @@ function MonthBlock({
   winners,
   xProfileMap,
   tokenMeta,
+  defaultAvatarUrls,
   onSelect,
 }: {
   winners: MonthlyRewardWinnersResponse;
   xProfileMap: Map<string, XProfile>;
   tokenMeta: Map<string, { symbol: string; decimals: number }>;
+  defaultAvatarUrls: string[];
   onSelect: (addr: string) => void;
 }) {
   const slots = potSlots(winners);
@@ -215,13 +229,13 @@ function MonthBlock({
   }, [winners, slots]);
 
   return (
-    <div className='glass-card rounded-xl overflow-hidden'>
+    <div className='rounded-xl overflow-hidden' style={{ background: 'rgba(60,45,20,0.14)', border: '1px solid rgba(200,150,42,0.20)', boxShadow: '0 2px 12px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,220,100,0.04)' }}>
       <div
         className='flex items-center gap-2 px-4 py-2.5'
-        style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}
+        style={{ borderBottom: '1px solid rgba(200,150,42,0.10)' }}
       >
         <Trophy size={14} style={{ color: '#FFD700' }} />
-        <span className='text-sm font-bold' style={{ color: '#fff' }}>
+        <span className='text-sm font-bold' style={{ color: '#E0B341' }}>
           {monthLabel(winners.monthKey)}
         </span>
       </div>
@@ -232,6 +246,7 @@ function MonthBlock({
             row={row}
             xProfile={xProfileMap.get(row.winner)}
             tokenMeta={tokenMeta}
+            defaultAvatarUrls={defaultAvatarUrls}
             onClick={() => onSelect(row.winner)}
           />
         ))}
@@ -241,8 +256,11 @@ function MonthBlock({
 }
 
 export function MonthlyHallOfFame() {
-  const [collapsed, setCollapsed] = useState(true);
+  const [collapsed, setCollapsed] = useState(false);
   const [profileAddress, setProfileAddress] = useState<string | null>(null);
+
+  // Default avatar pool — called once here and passed down to row components.
+  const defaultAvatarUrls = useDefaultAvatars();
 
   const { data: allWinners } = useRealtimeData<MonthlyRewardWinnersResponse[]>(
     subscribeManyMonthlyRewardWinners,
@@ -299,19 +317,20 @@ export function MonthlyHallOfFame() {
 
   return (
     <section className='mt-6'>
-      {/* Collapsible header — matches the "How Battles Work" disclosure pattern. */}
-      <div className='glass-card rounded-xl overflow-hidden'>
+      {/* Collapsible header — stone/gold treatment to match Arena aesthetic. */}
+      <div className='arena-card rounded-xl overflow-hidden'>
         <button
           type='button'
           className='w-full flex items-center justify-between p-4 transition-all hover:bg-white/[0.03]'
           onClick={() => setCollapsed((v) => !v)}
         >
           <div className='flex items-center gap-2'>
+            <Trophy size={14} style={{ color: '#E8C547' }} />
             <span className='text-sm font-bold' style={{ color: '#E8C547' }}>Hall of Fame</span>
             {months.length > 0 && (
               <span
                 className='text-xs font-bold px-1.5 py-0.5 rounded-full tabular-nums'
-                style={{ background: 'rgba(255,215,0,0.12)', color: '#E8C547' }}
+                style={{ background: 'rgba(255,215,0,0.12)', color: '#E8C547', border: '1px solid rgba(255,215,0,0.2)' }}
               >
                 {months.length}
               </span>
@@ -328,23 +347,24 @@ export function MonthlyHallOfFame() {
         </button>
 
         {!collapsed && (
-          <div className='px-3 pb-3'>
+          <div className='px-3 pb-3' style={{ borderTop: '1px solid rgba(200,150,42,0.12)' }}>
             {months.length === 0 ? (
-              <div className='glass-section rounded-xl p-8 text-center' style={{ borderStyle: 'dashed' }}>
-                <Trophy size={26} className='mx-auto mb-2' style={{ color: '#3A3A3A' }} />
+              <div className='rounded-xl p-8 text-center mt-2' style={{ border: '1px dashed rgba(200,150,42,0.18)' }}>
+                <Trophy size={26} className='mx-auto mb-2' style={{ color: 'rgba(200,150,42,0.18)' }} />
                 <p className='text-sm' style={{ color: '#5A5A5A' }}>No months finalized yet</p>
                 <p className='text-xs mt-1' style={{ color: '#4A4A4A' }}>
                   Past monthly prize-pot winners will appear here once a month wraps up.
                 </p>
               </div>
             ) : (
-              <div className='space-y-3 animate-fade-in'>
+              <div className='space-y-3 animate-fade-in mt-2'>
                 {months.map((w) => (
                   <MonthBlock
                     key={w.id}
                     winners={w}
                     xProfileMap={xProfileMap}
                     tokenMeta={tokenMeta}
+                    defaultAvatarUrls={defaultAvatarUrls}
                     onSelect={setProfileAddress}
                   />
                 ))}

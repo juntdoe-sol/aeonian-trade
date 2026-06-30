@@ -86,7 +86,7 @@ interface OBLevel {
   total: number;
 }
 
-export function OrderbookPanel({ symbol }: { symbol?: string }) {
+export function OrderbookPanel({ symbol, desktopLevels }: { symbol?: string; desktopLevels?: number }) {
   const [orderbook, setOrderbook] = useState<OrderbookData | null>(null);
   const [errored, setErrored] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -118,8 +118,8 @@ export function OrderbookPanel({ symbol }: { symbol?: string }) {
 
   // Best bid first (descending price); best ask first (ascending price).
   // Keep the book compact — ~7 levels per side fits fully on a mobile viewport
-  // without the card needing to scroll.
-  const LEVELS_PER_SIDE = 7;
+  // without the card needing to scroll. desktopLevels overrides for wider panels.
+  const LEVELS_PER_SIDE = desktopLevels ?? 5;
   const rawBids = [...(orderbook?.bids ?? [])]
     .filter(([p, s]) => p > 0 && s > 0)
     .sort((a, b) => b[0] - a[0])
@@ -151,15 +151,18 @@ export function OrderbookPanel({ symbol }: { symbol?: string }) {
   const bestAsk = askLevels[0]?.price;
   const hasLevels = bidLevels.length > 0 || askLevels.length > 0;
 
-  // Terminal states — never hang on "Loading…" forever.
-  if (errored) {
-    return (
-      <div className='text-center py-8 text-xs' style={{ color: '#FF5252' }}>
-        Failed to load orderbook. Retrying…
-      </div>
-    );
-  }
+  // Terminal states — never hang on "Loading…" forever. Only surface the error
+  // banner when we have nothing to show; a transient blip (e.g. upstream 429)
+  // while a book is already on screen keeps the last good levels visible and
+  // silently retries on the next 2s tick instead of flashing red.
   if (!orderbook) {
+    if (errored) {
+      return (
+        <div className='text-center py-8 text-xs' style={{ color: '#FF5252' }}>
+          Failed to load orderbook. Retrying…
+        </div>
+      );
+    }
     return <div className='text-center py-8 text-xs' style={{ color: '#8A8A8A' }}>Loading orderbook…</div>;
   }
   if (!hasLevels) {
@@ -185,7 +188,7 @@ export function OrderbookPanel({ symbol }: { symbol?: string }) {
     const barBg = `linear-gradient(to left, rgba(${rgb},0.22) 0%, rgba(${rgb},0.07) 100%)`;
     const widthPct = Math.max((lvl.total / maxTotal) * 100, 1.5);
     return (
-      <div className='relative grid grid-cols-3 text-[11px] tabular-nums px-3 py-0.5 overflow-hidden'>
+      <div className='relative grid grid-cols-3 gap-x-2 text-[11px] tabular-nums px-4 py-0.5 overflow-hidden'>
         <div
           className='absolute inset-y-0 right-0 pointer-events-none transition-[width] duration-300 ease-out'
           style={{ background: barBg, width: `${widthPct}%` }}
@@ -197,10 +200,16 @@ export function OrderbookPanel({ symbol }: { symbol?: string }) {
     );
   };
 
+  // When rendered on desktop the wrapper div fills 100% of the measured container
+  // height (DesktopOrderbook's ref div). overflow-y: auto lets it scroll if rows
+  // exceed the space, and the ResizeObserver in DesktopOrderbook adjusts the row
+  // count so scrolling rarely triggers.
+  const isDesktop = !!desktopLevels;
+
   return (
-    <div>
+    <div style={isDesktop ? { height: '100%', overflowY: 'auto' } : undefined}>
       {/* Column header */}
-      <div className='grid grid-cols-3 px-3 pb-1'>
+      <div className='grid grid-cols-3 gap-x-2 px-4 pb-1'>
         <span style={HEADER_COL}>Price (USDC)</span>
         <span className='text-right' style={HEADER_COL}>Size (USDC)</span>
         <span className='text-right' style={HEADER_COL}>Total (USDC)</span>
@@ -388,6 +397,8 @@ interface UserActivityPanelProps {
   closingKey?: string | null;
   /** Hide the History, My Trades, Order Log, and Funding tabs (e.g. on the trade page) */
   hideHistoryTabs?: boolean;
+  /** Optional extra className applied to the root wrapper element */
+  className?: string;
   /** Hide the Open Orders and Orderbook tabs (e.g. on the portfolio page) */
   hideOrdersAndOrderbook?: boolean;
   /**
@@ -395,6 +406,11 @@ interface UserActivityPanelProps {
    * to PositionsTable → OpenPositionShareModal so share cards always show a real price.
    */
   liveMarkBySymbol?: Map<string, number>;
+  /**
+   * When true, renders without the glass-card container so content sits flat on
+   * the page background (used by the mobile trade page).
+   */
+  flat?: boolean;
 }
 
 export function UserActivityPanel({
@@ -408,8 +424,10 @@ export function UserActivityPanel({
   hideHistoryTabs,
   hideOrdersAndOrderbook,
   liveMarkBySymbol,
+  flat,
+  className,
 }: UserActivityPanelProps) {
-  const { user } = useAuth();
+  const { user, login } = useAuth();
   const [activeTab, setActiveTab] = useState<ActivityTab>('positions');
 
   const HIDDEN_WHEN_HISTORY_OFF: ActivityTab[] = ['order-history', 'poof-trades', 'trades', 'funding-history'];
@@ -608,29 +626,57 @@ export function UserActivityPanel({
   const showSymbol = !symbol; // hide symbol column when we're on a specific market page
 
   return (
-    <div className='glass-card rounded-xl overflow-hidden'>
-      {/* Tab bar */}
-      <div className='flex overflow-x-auto' style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-        {visibleTabs.map(({ id, label }) => (
-          <button
-            key={id}
-            onClick={() => setActiveTab(id)}
-            className='flex-shrink-0 px-4 py-2.5 text-xs font-medium transition-colors'
-            style={{
-              color: activeTab === id ? '#b794f6' : '#8A8A8A',
-              borderBottom: activeTab === id ? '2px solid #b794f6' : '2px solid transparent',
-              marginBottom: '-1px',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {label}
-          </button>
-        ))}
+    <div className={`${flat ? 'overflow-hidden' : 'glass-card rounded-xl overflow-hidden'}${className ? ` ${className}` : ''}`}>
+      {/* Tab bar — matches the LONG/SHORT header-band tab style */}
+      <div className='flex overflow-x-auto' style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+        {visibleTabs.map(({ id, label }) => {
+          const active = activeTab === id;
+          // Desktop (flat): active tab always uses white underline/text.
+          // Mobile (!flat): positions=green, open-orders=red, others=orchid/purple.
+          const accentColor = flat
+            ? '#ffffff'
+            : id === 'positions' ? '#22c55e' : id === 'open-orders' ? '#ef4444' : '#ab9ff2';
+          const activeBg = flat
+            ? 'rgba(255,255,255,0.04)'
+            : id === 'positions'
+              ? 'rgba(34,197,94,0.06)'
+              : id === 'open-orders'
+                ? 'rgba(239,68,68,0.06)'
+                : 'rgba(171,159,242,0.06)';
+          return (
+            <button
+              key={id}
+              onClick={() => setActiveTab(id)}
+              className='relative flex-shrink-0 px-4 py-2.5 text-xs font-semibold transition-all'
+              style={{
+                color: active ? accentColor : '#6b6b80',
+                background: active ? activeBg : 'transparent',
+                boxShadow: active ? `inset 0 -2px 0 ${accentColor}` : 'none',
+                letterSpacing: '0.03em',
+                textTransform: 'uppercase',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {label}
+            </button>
+          );
+        })}
       </div>
 
       {/* Tab content */}
       <div className='p-3'>
-        {!user ? (
+        {!user && (activeTab === 'positions' || activeTab === 'open-orders') ? (
+          <div className='py-6 text-center'>
+            <p className='text-sm mb-3' style={{ color: '#8A8A8A' }}>No wallet detected</p>
+            <button
+              onClick={() => login()}
+              className='px-6 py-2 rounded-xl font-bold text-sm'
+              style={{ background: '#ab9ff2', color: '#fff' }}
+            >
+              Log In
+            </button>
+          </div>
+        ) : !user ? (
           <div className='py-6 text-center'>
             <p className='text-sm' style={{ color: '#8A8A8A' }}>Log in to view your activity</p>
           </div>

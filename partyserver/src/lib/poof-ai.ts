@@ -26,12 +26,15 @@
  *   - `google-ai-studio/gemini-2.5-flash`
  *   - `workers-ai/@cf/meta/llama-3.1-8b-instruct` (or shorthand: `@cf/meta/llama-3.1-8b-instruct`)
  *
- * Return shape: OpenAI Chat Completions, regardless of underlying provider.
+ * Return shape:
+ *   - Chat-compatible models return OpenAI Chat Completions:
  *   {
  *     id, object, created, model,
  *     choices: [{ index, message: { role, content }, finish_reason }],
  *     usage: { prompt_tokens, completion_tokens, total_tokens },
  *   }
+ *   - Native Workers AI models (embeddings, image generation, classifiers,
+ *     vision/image input, audio) return their model-native shape.
  *
  * Usage:
  *   import { aiRun } from './lib/poof-ai.js';
@@ -50,14 +53,47 @@
  *   // result.choices[0].message.content is the model output
  *   // usage.costCredits is what got billed against the project
  *
- * Cloudflare Workers AI non-chat models (embeddings, image, audio):
- *   `@cf/baai/bge-*`, `@cf/black-forest-labs/*`, `@cf/openai/whisper-*`,
- *   `@cf/deepgram/*`, `@cf/myshell-ai/*` etc. work through aiRun too —
- *   the proxy auto-routes them to the legacy /workers-ai/{model} endpoint
- *   and returns the model's native shape (e.g. `{data, shape}` for
- *   embeddings, `ArrayBuffer` for image/audio bytes). Type the generic
- *   accordingly. Third-party (OpenAI/Anthropic/etc.) embeddings/image/
- *   audio are NOT wired up — only Cloudflare-hosted non-chat models.
+ * Cloudflare Workers AI native models (embeddings, image, audio, vision):
+ *   `@cf/baai/bge-*`, `@cf/llava-hf/llava-1.5-7b-hf`,
+ *   `@cf/google/gemma-4-26b-a4b-it`,
+ *   `@cf/microsoft/resnet-50`, `@cf/facebook/detr-resnet-50`,
+ *   `@cf/black-forest-labs/*`, `@cf/openai/whisper-*`, `@cf/deepgram/*`,
+ *   `@cf/myshell-ai/*` etc. work through aiRun too — the proxy auto-routes
+ *   them to the native /workers-ai/{model} endpoint and returns the model's
+ *   native shape (e.g. `{data, shape}` for embeddings, `{description}` for
+ *   LLaVA image-to-text, OpenAI Chat Completions for Gemma vision chat, and
+ *   `ArrayBuffer` for image/audio bytes). Type the generic accordingly.
+ *   Third-party provider-native embeddings, image generation/editing, audio,
+ *   and video endpoints are NOT wired up — use Cloudflare-hosted native
+ *   models for those.
+ *
+ * Workers AI image input:
+ *   const result = await aiRun<WorkersAiVisionOutput>(
+ *     c.env,
+ *     '@cf/google/gemma-4-26b-a4b-it',
+ *     {
+ *       messages: [{ role: 'user', content: [
+ *         textPart('Describe this image'),
+ *         imageUrlPart(imageDataUrl(base64Png, 'image/png')),
+ *       ] }],
+ *     },
+ *     { max_completion_tokens: 128 },
+ *   );
+ *   const text = extractWorkersAiText(result);
+ *
+ * Read text from an image (OCR-style):
+ *   const result = await aiRun<WorkersAiVisionOutput>(
+ *     c.env,
+ *     '@cf/google/gemma-4-26b-a4b-it',
+ *     {
+ *       messages: [{ role: 'user', content: [
+ *         textPart('Read all visible text exactly. Preserve line breaks.'),
+ *         imageUrlPart(imageDataUrl(base64Png, 'image/png')),
+ *       ] }],
+ *     },
+ *     { max_completion_tokens: 256 },
+ *   );
+ *   const visibleText = extractWorkersAiText(result);
  */
 import type { Context } from 'hono';
 
@@ -79,6 +115,99 @@ export interface AiUsage {
 export interface AiRunWithUsage<T> {
   result: T;
   usage: AiUsage;
+}
+
+export const POOF_AI_MAX_JSON_REQUEST_BYTES = 8 * 1024 * 1024;
+export const POOF_AI_MAX_NUMBER_ARRAY_IMAGE_BYTES = 1_500_000;
+
+export type AiImageInput = string | number[];
+
+export type AiChatMessageContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } };
+
+export interface AiChatMessage {
+  role: string;
+  content: string | AiChatMessageContentPart[];
+}
+
+export interface WorkersAiVisionInputs {
+  messages?: AiChatMessage[];
+  prompt?: string;
+  image?: AiImageInput;
+  stream?: boolean;
+  max_tokens?: number;
+  temperature?: number;
+  top_p?: number;
+  top_k?: number;
+  [key: string]: unknown;
+}
+
+export interface WorkersAiVisionOutput {
+  response?: string;
+  description?: string;
+  text?: string;
+  choices?: Array<{
+    message?: {
+      content?: string | null;
+      role?: string;
+      [key: string]: unknown;
+    };
+    [key: string]: unknown;
+  }>;
+  [key: string]: unknown;
+}
+
+export interface ImageBytesToNumberArrayOptions {
+  maxBytes?: number;
+}
+
+export class AiImageTooLargeError extends Error {
+  constructor(bytes: number, maxBytes: number) {
+    super(
+      `image is ${bytes} bytes; imageBytesToNumberArray supports up to ${maxBytes} bytes before JSON exceeds the Poof AI request limit`,
+    );
+    this.name = 'AiImageTooLargeError';
+  }
+}
+
+export function imageBytesToNumberArray(
+  bytes: ArrayBuffer | Uint8Array,
+  options: ImageBytesToNumberArrayOptions = {},
+): number[] {
+  const view = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  const maxBytes = options.maxBytes ?? POOF_AI_MAX_NUMBER_ARRAY_IMAGE_BYTES;
+  if (Number.isFinite(maxBytes) && view.byteLength > maxBytes) {
+    throw new AiImageTooLargeError(view.byteLength, maxBytes);
+  }
+  return Array.from(view);
+}
+
+export function imageDataUrl(base64: string, mediaType = 'image/png'): string {
+  return base64.startsWith('data:') ? base64 : `data:${mediaType};base64,${base64}`;
+}
+
+export function textPart(text: string): AiChatMessageContentPart {
+  return { type: 'text', text };
+}
+
+export function imageUrlPart(url: string): AiChatMessageContentPart {
+  return { type: 'image_url', image_url: { url } };
+}
+
+function nonEmptyText(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+}
+
+export function extractWorkersAiText(result: WorkersAiVisionOutput): string {
+  const message = result.choices?.find((choice) => choice.message)?.message;
+  return (
+    nonEmptyText(message?.content) ??
+    nonEmptyText(result.response) ??
+    nonEmptyText(result.description) ??
+    nonEmptyText(result.text) ??
+    ''
+  );
 }
 
 export type AiRunOptions = {

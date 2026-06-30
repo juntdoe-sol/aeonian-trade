@@ -1,5 +1,6 @@
 import { useAuth } from '@pooflabs/web';
 import { AlertCircle, AtSign, CheckCircle, Clock, Eye, Loader2, Share2, Swords, Trophy, UserCheck, X } from 'lucide-react';
+import { Torch } from './arena/Torch';
 import { truncateAddress } from '@/utils/format-address';
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -155,7 +156,8 @@ function TraderColumn({ label, xHandle, wallet, equityAtStartMicro, liveData, is
             style={{
               background: label === 'Challenger' ? 'rgba(74,222,128,0.15)' : 'rgba(255,82,82,0.15)',
               color: label === 'Challenger' ? '#4ADE80' : '#FF5252',
-              border: isWinner ? '2px solid #FFD700' : 'none',
+              border: isWinner ? '2px solid #E0B341' : 'none',
+              boxShadow: isWinner ? '0 0 12px rgba(200,150,42,0.4)' : 'none',
             }}
           >
             {(xHandle ?? wallet ?? '?').charAt(0).toUpperCase()}
@@ -164,7 +166,7 @@ function TraderColumn({ label, xHandle, wallet, equityAtStartMicro, liveData, is
             <Trophy
               size={14}
               className='absolute -top-1 -right-1'
-              style={{ color: '#FFD700' }}
+              style={{ color: '#E0B341', filter: 'drop-shadow(0 0 4px rgba(200,150,42,0.6))' }}
             />
           )}
         </div>
@@ -636,12 +638,26 @@ export default function BattleDetailPage() {
           ← Battles
         </button>
 
-        {/* Header card */}
+        {/* Header card — arena styled */}
         <div
-          className='glass-card rounded-xl p-4'
+          className='arena-sand-particles rounded-xl p-4 overflow-hidden relative'
+          style={{
+            background: 'linear-gradient(135deg, rgba(60,45,15,0.5) 0%, rgba(35,22,5,0.65) 100%)',
+            border: '1px solid rgba(200,150,42,0.28)',
+            boxShadow: '0 4px 24px rgba(0,0,0,0.35), 0 0 0 1px rgba(200,150,42,0.06) inset',
+          }}
         >
-          <div className='flex items-center justify-between mb-3'>
+          {/* Background arch watermark */}
+          <div style={{ position: 'absolute', inset: 0, opacity: 0.035, pointerEvents: 'none', overflow: 'hidden' }}>
+            <svg width='100%' height='100%' viewBox='0 0 200 100' preserveAspectRatio='xMidYMid slice'>
+              <path d='M70 100 L70 50 Q100 15 130 50 L130 100' stroke='rgba(200,150,42,1)' strokeWidth='2.5' fill='none' />
+              <line x1='0' y1='95' x2='200' y2='95' stroke='rgba(200,150,42,1)' strokeWidth='1.5' />
+            </svg>
+          </div>
+
+          <div className='flex items-center justify-between mb-3 relative z-10'>
             <div className='flex items-center gap-2'>
+              <Torch size='sm' />
               <StatusBadge status={battle.status} />
               {isSpectator && (
                 <span
@@ -653,34 +669,37 @@ export default function BattleDetailPage() {
                 </span>
               )}
             </div>
-            {isActive && battle.startTime > 0 && (
-              <CircularCountdown
-                startTime={battle.startTime}
-                endTime={battle.endTime}
-                size={72}
-                strokeWidth={5}
-                color='#b794f6'
-                bgColor='rgba(183,148,246,0.15)'
-              />
-            )}
-            {isActive && battle.startTime === 0 && (
-              <div className='flex items-center gap-1.5' style={{ color: '#b794f6' }}>
-                <Clock size={13} />
-                <span className='text-sm font-bold tabular-nums'>{countdown}</span>
-              </div>
-            )}
+            <div className='flex items-center gap-2'>
+              {isActive && battle.startTime > 0 && (
+                <CircularCountdown
+                  startTime={battle.startTime}
+                  endTime={battle.endTime}
+                  size={72}
+                  strokeWidth={5}
+                  color='#E0B341'
+                  bgColor='rgba(200,150,42,0.15)'
+                />
+              )}
+              {isActive && battle.startTime === 0 && (
+                <div className='flex items-center gap-1.5' style={{ color: '#E0B341' }}>
+                  <Clock size={13} />
+                  <span className='text-sm font-bold tabular-nums'>{countdown}</span>
+                </div>
+              )}
+              <Torch size='sm' flip />
+            </div>
           </div>
 
-          <div className='grid grid-cols-3 gap-2 text-center'>
+          <div className='grid grid-cols-3 gap-2 text-center relative z-10'>
             <div>
               <div className='text-xs mb-0.5' style={{ color: '#8A8A8A' }}>Bet Each</div>
-              <div className='text-base font-bold tabular-nums' style={{ color: '#b794f6' }}>
+              <div className='text-base font-bold tabular-nums' style={{ color: '#C8962A' }}>
                 {formatUsdcMicro(battle.betAmountMicro)}
               </div>
             </div>
             <div>
-              <div className='text-xs mb-0.5' style={{ color: '#8A8A8A' }}>Total Pot</div>
-              <div className='text-base font-bold tabular-nums' style={{ color: '#4ADE80' }}>
+              <div className='text-xs mb-0.5' style={{ color: '#8A8A8A' }}>Victory Treasury</div>
+              <div className='text-base font-bold tabular-nums' style={{ color: '#E0B341', textShadow: '0 0 8px rgba(200,150,42,0.4)' }}>
                 {formatUsdcMicro(battle.betAmountMicro * 2)}
               </div>
             </div>
@@ -710,10 +729,15 @@ export default function BattleDetailPage() {
 
         {/* Head-to-head */}
         <div className='relative'>
-          {/* VS badge */}
+          {/* VS badge — arena gold style */}
           <div
-            className='absolute left-1/2 top-8 -translate-x-1/2 w-8 h-8 rounded-full flex items-center justify-center z-10 text-xs font-black'
-            style={{ background: '#b794f6', color: '#fff' }}
+            className='absolute left-1/2 top-8 -translate-x-1/2 w-9 h-9 rounded-full flex items-center justify-center z-10 text-xs font-black'
+            style={{
+              background: 'linear-gradient(135deg, rgba(200,150,42,0.3) 0%, rgba(140,100,20,0.5) 100%)',
+              border: '1.5px solid rgba(200,150,42,0.5)',
+              boxShadow: '0 0 12px rgba(200,150,42,0.3)',
+              color: '#E0B341',
+            }}
           >
             VS
           </div>

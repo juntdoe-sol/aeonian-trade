@@ -13,10 +13,9 @@ import {
 import {
   monthLabel,
   symbolForMint,
-  formatTokenAmount,
-  fromBaseUnits,
-  toBaseUnits,
+  decimalsForMint,
 } from '@/utils/monthly-reward-tokens';
+import { useTokenMetadata } from '@/utils/use-token-metadata';
 import { errorToast, successToast } from '@/utils/toast-helpers';
 
 interface WithdrawFromPotSectionProps {
@@ -33,6 +32,11 @@ interface WithdrawFromPotSectionProps {
  * on-chain pot PDA (deposits minus prior withdrawals), never from summing records.
  */
 export function WithdrawFromPotSection({ monthKey, potAccountId, mints }: WithdrawFromPotSectionProps) {
+  // Resolve real symbol + decimals for every mint in the pot.
+  // Known mints (SOL, USDC) resolve instantly from cache; unknown mints are fetched
+  // via /api/token/lookup. Mirrors the same pattern used by PnlLeaderboard.
+  const tokenMeta = useTokenMetadata(mints);
+
   return (
     <Card className="glass-card">
       <CardHeader className="pb-3">
@@ -54,14 +58,19 @@ export function WithdrawFromPotSection({ monthKey, potAccountId, mints }: Withdr
               wallet approval.
             </p>
             <div className="space-y-2">
-              {mints.map((mint) => (
-                <WithdrawTokenRow
-                  key={mint}
-                  monthKey={monthKey}
-                  potAccountId={potAccountId}
-                  mint={mint}
-                />
-              ))}
+              {mints.map((mint) => {
+                const meta = tokenMeta.get(mint);
+                return (
+                  <WithdrawTokenRow
+                    key={mint}
+                    monthKey={monthKey}
+                    potAccountId={potAccountId}
+                    mint={mint}
+                    resolvedSymbol={meta?.symbol}
+                    resolvedDecimals={meta?.decimals}
+                  />
+                );
+              })}
             </div>
           </>
         )}
@@ -74,15 +83,39 @@ interface WithdrawTokenRowProps {
   monthKey: string;
   potAccountId: string;
   mint: string;
+  /** Resolved symbol from useTokenMetadata — undefined while still loading. Falls back to symbolForMint. */
+  resolvedSymbol?: string;
+  /** Resolved decimals from useTokenMetadata — undefined while still loading. Falls back to decimalsForMint. */
+  resolvedDecimals?: number;
 }
 
-function WithdrawTokenRow({ monthKey, potAccountId, mint }: WithdrawTokenRowProps) {
+function WithdrawTokenRow({ monthKey, potAccountId, mint, resolvedSymbol, resolvedDecimals }: WithdrawTokenRowProps) {
   const { user } = useAuth();
   const [balance, setBalance] = useState<number | null>(null); // base units; null = loading
   const [amount, setAmount] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const symbol = symbolForMint(mint);
+  // Use resolved metadata when available; fall back to legacy helpers while loading.
+  // decimalsForMint returns 9 for SOL, 6 for USDC, and 0 for unknown mints.
+  const symbol = resolvedSymbol ?? symbolForMint(mint);
+  const decimals = resolvedDecimals ?? decimalsForMint(mint);
+
+  // Inline base-unit ↔ human conversions using resolved decimals.
+  // These replace the mint-keyed helpers so arbitrary tokens (e.g. SKR with 6 decimals)
+  // convert correctly once metadata resolves.
+  const baseToHuman = (base: number): number =>
+    decimals > 0 ? base / Math.pow(10, decimals) : base;
+  const humanToBase = (human: number): number =>
+    Math.round(human * Math.pow(10, decimals));
+  const formatResolved = (base: number): string => {
+    const human = baseToHuman(base);
+    const maxFrac = Math.min(decimals, 6);
+    const str = human.toLocaleString(undefined, {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: maxFrac,
+    });
+    return `${str} ${symbol}`;
+  };
 
   const refreshBalance = useCallback(async () => {
     try {
@@ -105,11 +138,11 @@ function WithdrawTokenRow({ monthKey, potAccountId, mint }: WithdrawTokenRowProp
   }, [refreshBalance]);
 
   const balanceBaseUnits = balance ?? 0;
-  const humanBalance = fromBaseUnits(balanceBaseUnits, mint);
+  const humanBalance = baseToHuman(balanceBaseUnits);
 
   const parsed = parseFloat(amount);
   const requestedBaseUnits =
-    isFinite(parsed) && parsed > 0 ? toBaseUnits(parsed, mint) : 0;
+    isFinite(parsed) && parsed > 0 ? humanToBase(parsed) : 0;
 
   const exceedsBalance = requestedBaseUnits > balanceBaseUnits;
   const canWithdraw =
@@ -135,7 +168,7 @@ function WithdrawTokenRow({ monthKey, potAccountId, mint }: WithdrawTokenRowProp
       return;
     }
     if (exceedsBalance) {
-      errorToast(`That exceeds the pot's ${symbol} balance of ${formatTokenAmount(balanceBaseUnits, mint)}.`);
+      errorToast(`That exceeds the pot's ${symbol} balance of ${formatResolved(balanceBaseUnits)}.`);
       return;
     }
 
@@ -154,7 +187,7 @@ function WithdrawTokenRow({ monthKey, potAccountId, mint }: WithdrawTokenRowProp
 
       if (ok) {
         successToast(
-          `Withdrew ${formatTokenAmount(requestedBaseUnits, mint)} from the ${monthLabel(monthKey)} prize pot.`,
+          `Withdrew ${formatResolved(requestedBaseUnits)} from the ${monthLabel(monthKey)} prize pot.`,
         );
         setAmount('');
         await refreshBalance();
@@ -179,7 +212,7 @@ function WithdrawTokenRow({ monthKey, potAccountId, mint }: WithdrawTokenRowProp
         <div className="min-w-0 flex-1">
           <div className="text-sm font-semibold leading-tight">{symbol}</div>
           <div className="text-[10px] text-muted-foreground font-mono flex items-center gap-1">
-            <span>In pot: {formatTokenAmount(balanceBaseUnits, mint)}</span>
+            <span>In pot: {formatResolved(balanceBaseUnits)}</span>
             <button
               type="button"
               onClick={() => void refreshBalance()}

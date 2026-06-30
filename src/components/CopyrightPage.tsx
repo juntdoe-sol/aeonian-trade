@@ -19,7 +19,7 @@ export function CopyrightPage() {
         </Link>
         <h1 className='font-bold text-xl'>Copyright</h1>
         <p className='text-xs mt-1' style={{ color: '#8A8A8A' }}>
-          Last updated: May 2025
+          Last updated: June 2026
         </p>
       </div>
 
@@ -52,7 +52,7 @@ export function CopyrightPage() {
 
         <Section title='Trademarks'>
           <p style={{ color: '#8A8A8A' }}>
-            &ldquo;AEONIAN&rdquo; and the Phoenix logo are trademarks or registered trademarks. No
+            &ldquo;AEONIAN&rdquo; and the AEONIAN logo are trademarks or registered trademarks. No
             license or right to use any trademark is granted to you by virtue of accessing or using
             this application.
           </p>
@@ -62,9 +62,10 @@ export function CopyrightPage() {
 
         <Section title='Third-Party Content'>
           <p style={{ color: '#8A8A8A' }}>
-            Market data, pricing, and on-chain transaction data are sourced from Phoenix Exchange
-            and public Solana blockchain infrastructure. AEONIAN makes no claim of ownership over
-            such third-party content and presents it for informational purposes only.
+            Market data, pricing, and on-chain transaction data are sourced from underlying
+            on-chain trading venues and public Solana blockchain infrastructure. AEONIAN makes no
+            claim of ownership over such third-party content and presents it for informational
+            purposes only.
           </p>
         </Section>
 

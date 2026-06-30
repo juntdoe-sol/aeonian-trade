@@ -11,7 +11,7 @@
  * opens or closes a trade — see partyserver notify-followers fan-out.
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@pooflabs/web';
 import { Bell, TrendingUp, TrendingDown, Trophy, UserPlus, Zap, EyeOff, Megaphone } from 'lucide-react';
@@ -23,6 +23,7 @@ import {
 import { truncateAddress } from '@/utils/format-address';
 import { useHiddenPnlWallets } from '@/utils/use-hide-pnl';
 import { monthLabel } from '@/utils/monthly-reward-tokens';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 const POS = '#4ADE80';
 const NEG = '#FF5252';
@@ -295,10 +296,58 @@ function NotificationItem({
   );
 }
 
+// ─── Shared notification list content ────────────────────────────────────────
+
+function NotificationList({
+  sorted,
+  hiddenWallets,
+  onClose,
+  navigate,
+}: {
+  sorted: NotificationsResponse[];
+  hiddenWallets: Set<string>;
+  onClose: () => void;
+  navigate: ReturnType<typeof useNavigate>;
+}) {
+  if (sorted.length === 0) {
+    return (
+      <div className='py-12 text-center'>
+        <Bell size={28} className='mx-auto mb-3' style={{ color: '#2A2A2A' }} />
+        <p className='text-sm' style={{ color: '#6A6A7A' }}>No notifications yet</p>
+        <p className='text-xs mt-1' style={{ color: '#4A4A5A' }}>
+          Follow traders to get notified when they open or close trades
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {sorted.map((n) => (
+        <NotificationItem
+          key={n.id}
+          n={n}
+          maskPnl={n.actor !== n.recipient && hiddenWallets.has(n.actor)}
+          onClaim={
+            n.type === 'monthly_reward' || n.type === 'monthly_pot_open'
+              ? () => {
+                  onClose();
+                  navigate('/battles');
+                }
+              : undefined
+          }
+        />
+      ))}
+    </>
+  );
+}
+
 export function NotificationBell() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const [open, setOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   const { data: notifications } = useRealtimeData<NotificationsResponse[]>(
     subscribeManyNotifications,
@@ -320,6 +369,18 @@ export function NotificationBell() {
     [notifications],
   );
 
+  // Close desktop dropdown on outside click
+  useEffect(() => {
+    if (!open || isMobile) return;
+    function handle(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handle);
+    return () => document.removeEventListener('mousedown', handle);
+  }, [open, isMobile]);
+
   // Only render the bell for logged-in users.
   if (!user?.address) return null;
 
@@ -334,79 +395,154 @@ export function NotificationBell() {
     if (next && unreadCount > 0) void markAllRead();
   };
 
-  return (
-    <>
-      <button
-        onClick={() => handleOpen(true)}
-        aria-label='Notifications'
-        title='Notifications'
-        className='relative flex items-center justify-center w-8 h-8 rounded-lg transition-colors'
-        style={{ color: '#8A8A8A' }}
-      >
-        <Bell size={16} />
-        {unreadCount > 0 && (
-          <span
-            className='absolute -top-0.5 -right-0.5 min-w-[15px] h-[15px] px-1 rounded-full flex items-center justify-center text-[9px] font-black'
-            style={{ background: NEG, color: '#fff', lineHeight: 1 }}
-          >
-            {unreadCount > 9 ? '9+' : unreadCount}
-          </span>
-        )}
-      </button>
-
-      <Sheet open={open} onOpenChange={handleOpen}>
-        <SheetContent
-          side='bottom'
-          className='glass-card border-t p-0 max-h-[80dvh] overflow-hidden flex flex-col'
-          style={{
-            background: 'hsl(270 45% 9% / 0.92)',
-            backdropFilter: 'blur(24px)',
-            WebkitBackdropFilter: 'blur(24px)',
-            borderColor: 'rgba(255,255,255,0.08)',
-            borderTopLeftRadius: 24,
-            borderTopRightRadius: 24,
-          }}
+  const bellButton = (
+    <button
+      onClick={() => handleOpen(!open)}
+      aria-label='Notifications'
+      title='Notifications'
+      className='relative flex items-center justify-center w-8 h-8 rounded-lg transition-colors'
+      style={{ color: open && !isMobile ? ACCENT : '#8A8A8A' }}
+    >
+      <Bell size={16} />
+      {unreadCount > 0 && (
+        <span
+          className='absolute -top-0.5 -right-0.5 min-w-[15px] h-[15px] px-1 rounded-full flex items-center justify-center text-[9px] font-black'
+          style={{ background: NEG, color: '#fff', lineHeight: 1 }}
         >
-          <div className='flex justify-center pt-3 pb-1'>
-            <div className='w-10 h-1 rounded-full' style={{ background: 'rgba(255,255,255,0.18)' }} />
-          </div>
+          {unreadCount > 9 ? '9+' : unreadCount}
+        </span>
+      )}
+    </button>
+  );
 
-          <div className='px-5 pt-2 pb-3 flex items-center gap-2'>
-            <Bell size={16} style={{ color: ACCENT }} />
-            <h2 className='text-base font-black' style={{ color: '#fff' }}>Notifications</h2>
-          </div>
+  // ── MOBILE: bottom sheet (unchanged) ─────────────────────────────────────────
+  if (isMobile) {
+    return (
+      <>
+        {bellButton}
+        <Sheet open={open} onOpenChange={handleOpen}>
+          <SheetContent
+            side='bottom'
+            className='border-t p-0 max-h-[80dvh] overflow-hidden flex flex-col'
+            style={{
+              background: '#1a1a1f',
+              borderColor: 'rgba(255,255,255,0.08)',
+              borderTopLeftRadius: 24,
+              borderTopRightRadius: 24,
+            }}
+          >
+            <div className='flex justify-center pt-3 pb-1'>
+              <div className='w-10 h-1 rounded-full' style={{ background: 'rgba(255,255,255,0.18)' }} />
+            </div>
+            <div className='px-5 pt-2 pb-3 flex items-center gap-2'>
+              <Bell size={16} style={{ color: ACCENT }} />
+              <h2 className='text-base font-black' style={{ color: '#fff' }}>Notifications</h2>
+            </div>
+            <div className='overflow-y-auto px-4 pb-8 space-y-2'>
+              <NotificationList
+                sorted={sorted}
+                hiddenWallets={hiddenWallets}
+                onClose={() => setOpen(false)}
+                navigate={navigate}
+              />
+            </div>
+          </SheetContent>
+        </Sheet>
+      </>
+    );
+  }
 
-          <div className='overflow-y-auto px-4 pb-8 space-y-2'>
-            {sorted.length === 0 ? (
-              <div className='py-12 text-center'>
-                <Bell size={28} className='mx-auto mb-3' style={{ color: '#2A2A2A' }} />
-                <p className='text-sm' style={{ color: '#6A6A7A' }}>No notifications yet</p>
-                <p className='text-xs mt-1' style={{ color: '#4A4A5A' }}>
-                  Follow traders to get notified when they open or close trades
-                </p>
-              </div>
-            ) : (
-              sorted.map((n) => (
-                <NotificationItem
-                  key={n.id}
-                  n={n}
-                  maskPnl={n.actor !== n.recipient && hiddenWallets.has(n.actor)}
-                  onClaim={
-                    n.type === 'monthly_reward' || n.type === 'monthly_pot_open'
-                      ? () => {
-                          setOpen(false);
-                          // The Arena leaderboard view hosts the monthly pot UI
-                          // (claim for winners; live pot for the open announcement).
-                          navigate('/battles');
-                        }
-                      : undefined
-                  }
-                />
-              ))
+  // ── DESKTOP: anchored dropdown panel ─────────────────────────────────────────
+  return (
+    <div ref={dropdownRef} style={{ position: 'relative' }}>
+      {bellButton}
+
+      {open && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 'calc(100% + 8px)',
+            right: 0,
+            width: 380,
+            maxHeight: 480,
+            background: '#16161c',
+            border: '1px solid rgba(255,255,255,0.08)',
+            borderRadius: 14,
+            boxShadow: '0 16px 48px rgba(0,0,0,0.65)',
+            zIndex: 200,
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+          }}
+          className='notif-dropdown'
+        >
+          {/* Header */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '14px 16px 12px',
+              borderBottom: '1px solid rgba(255,255,255,0.06)',
+              flexShrink: 0,
+            }}
+          >
+            <Bell size={15} style={{ color: ACCENT }} />
+            <span
+              style={{
+                fontSize: 14,
+                fontWeight: 700,
+                color: '#fff',
+                letterSpacing: '-0.01em',
+              }}
+            >
+              Notifications
+            </span>
+            {unreadCount > 0 && (
+              <span
+                style={{
+                  marginLeft: 'auto',
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: ACCENT,
+                  background: 'rgba(183,148,246,0.12)',
+                  padding: '2px 7px',
+                  borderRadius: 6,
+                }}
+              >
+                {unreadCount} new
+              </span>
             )}
           </div>
-        </SheetContent>
-      </Sheet>
-    </>
+
+          {/* Scrollable list */}
+          <div
+            className='notif-dropdown-scroll'
+            style={{
+              overflowY: 'auto',
+              flex: 1,
+              padding: '8px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 6,
+            }}
+          >
+            <NotificationList
+              sorted={sorted}
+              hiddenWallets={hiddenWallets}
+              onClose={() => setOpen(false)}
+              navigate={navigate}
+            />
+          </div>
+        </div>
+      )}
+
+      <style>{`
+        .notif-dropdown-scroll::-webkit-scrollbar { width: 3px; }
+        .notif-dropdown-scroll::-webkit-scrollbar-track { background: transparent; }
+        .notif-dropdown-scroll::-webkit-scrollbar-thumb { background: rgba(171,159,242,0.2); border-radius: 2px; }
+        .notif-dropdown-scroll::-webkit-scrollbar-thumb:hover { background: rgba(171,159,242,0.38); }
+      `}</style>
+    </div>
   );
 }

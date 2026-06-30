@@ -237,7 +237,7 @@ export type MarketCategory = 'crypto' | 'commodities' | 'equities';
 /** Bare symbols classified as commodities (everything else defaults to crypto). */
 const COMMODITY_SYMBOLS = new Set(['GOLD', 'SILVER', 'COPPER', 'WTIOIL']);
 /** Bare symbols classified as equities. */
-const EQUITY_SYMBOLS = new Set(['NVDA', 'AAPL', 'SPCX']);
+const EQUITY_SYMBOLS = new Set(['NVDA', 'AAPL', 'SPCX', 'GOOGL', 'TSLA', 'MU']);
 
 /**
  * Classify a market symbol/key into a UI category.

@@ -18,6 +18,8 @@ import { getTokenLogoUrl, getFallbackLogoUrl } from '@/utils/token-logos';
 import { useAuth } from '@pooflabs/web';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useAppLogo } from '@/hooks/use-app-logo';
+import { useDefaultAvatars } from '@/hooks/use-default-avatars';
+import { pickDefaultAvatar } from '@/utils/default-avatar';
 import OpenPositionShareCard, { OpenPositionOverlayCapture } from './OpenPositionShareCard';
 import type { TraderPosition } from './types';
 
@@ -47,6 +49,7 @@ export function OpenPositionShareModal({ open, onClose, position, liveMark }: Op
   const { user, login } = useAuth();
   const isMobile = useIsMobile();
   const platformLogoUrl = useAppLogo();
+  const defaultAvatarUrls = useDefaultAvatars();
 
   // Snapshot the position data at the moment the modal opens so that live polling
   // updates to the underlying position data do NOT re-render the card while the
@@ -75,7 +78,19 @@ export function OpenPositionShareModal({ open, onClose, position, liveMark }: Op
       if (user?.address) {
         const storageKey = `social:${user.address}:twitter`;
         getSocialLinks(storageKey).then(async (link) => {
-          if (!link?.profile) return;
+          if (!link?.profile) {
+            // No X profile — fall back to the default avatar pool if available.
+            const fallbackUrl = pickDefaultAvatar(user.address, defaultAvatarUrls);
+            if (fallbackUrl) {
+              try {
+                const dataUrl = await remoteUrlToDataUrl(fallbackUrl);
+                setXAvatarDataUrl(dataUrl);
+              } catch {
+                // default avatar fetch failed
+              }
+            }
+            return;
+          }
           try {
             const parsed = typeof link.profile === 'string' ? JSON.parse(link.profile) : link.profile;
             if (!parsed?.username) return;
@@ -86,6 +101,17 @@ export function OpenPositionShareModal({ open, onClose, position, liveMark }: Op
                 setXAvatarDataUrl(dataUrl);
               } catch {
                 // avatar fetch failed — username still shows, avatar silently omitted
+              }
+            } else {
+              // Has X username but no avatar — try default avatar pool.
+              const fallbackUrl = pickDefaultAvatar(user.address, defaultAvatarUrls);
+              if (fallbackUrl) {
+                try {
+                  const dataUrl = await remoteUrlToDataUrl(fallbackUrl);
+                  setXAvatarDataUrl(dataUrl);
+                } catch {
+                  // default avatar fetch failed
+                }
               }
             }
           } catch {
@@ -101,7 +127,7 @@ export function OpenPositionShareModal({ open, onClose, position, liveMark }: Op
       setXAvatarDataUrl(undefined);
     }
     prevOpenRef.current = open;
-  }, [open, position, user?.address, liveMark]);
+  }, [open, position, user?.address, liveMark, defaultAvatarUrls]);
 
   // Pre-fetch the hardcoded share-card background and platform logo as data URLs
   // so html-to-image can embed them without cross-origin taint issues (remote S3

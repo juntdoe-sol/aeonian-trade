@@ -119,9 +119,13 @@ export function mapPosition(pos: RisePosition): TraderPosition {
     markPrice: mark > 0 ? mark : entryPrice,
     pnl: toNumber(pos.unrealizedPnl),
     liquidationPrice: toNumber(pos.liquidationPrice),
+    // Margin at play — the initial margin posted for this position.
+    initialMargin: toNumber(pos.initialMargin),
     subaccountIndex: typeof pos.subaccountIndex === 'number' ? pos.subaccountIndex : undefined,
     stopLossPrice: sl > 0 ? sl : undefined,
     takeProfitPrice: tp > 0 ? tp : undefined,
+    // Forward the draft-mock marker so handleClosePosition can short-circuit.
+    ...(pos._isMockDraftPosition ? { _isMockDraftPosition: true as const } : {}),
   };
 }
 

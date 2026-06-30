@@ -39,7 +39,7 @@ export function useTraderHidePnl(traderAddress: string | null, enabled: boolean 
 /**
  * Subscribe to the whole `leaderboardPrivacy` collection and return a Set of
  * wallet addresses that opted to hide PnL. For surfaces that render MANY
- * traders at once (wins ticker, big-win popup, notification feed).
+ * traders at once (notification feed, leaderboard).
  */
 export function useHiddenPnlWallets(enabled: boolean = true): Set<string> {
   const { data } = useRealtimeData<LeaderboardPrivacyResponse[]>(

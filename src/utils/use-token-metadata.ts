@@ -13,7 +13,29 @@ import { KNOWN_TOKENS, type KnownToken } from '@/utils/monthly-reward-tokens';
 // Module-level cache so resolutions persist across component unmounts/remounts.
 // Only SUCCESSFUL lookups are stored here (failures are tracked separately so
 // they can be retried on the next hook invocation).
-const cache = new Map<string, KnownToken>();
+const CACHE_STORAGE_KEY = 'poof_token_meta_cache_v1';
+
+function loadCacheFromStorage(): Map<string, KnownToken> {
+  try {
+    const raw = localStorage.getItem(CACHE_STORAGE_KEY);
+    if (!raw) return new Map();
+    const parsed = JSON.parse(raw) as [string, KnownToken][];
+    if (!Array.isArray(parsed)) return new Map();
+    return new Map(parsed);
+  } catch {
+    return new Map();
+  }
+}
+
+function saveCacheToStorage(cacheMap: Map<string, KnownToken>): void {
+  try {
+    localStorage.setItem(CACHE_STORAGE_KEY, JSON.stringify(Array.from(cacheMap.entries())));
+  } catch {
+    // Quota exceeded or storage unavailable — silently ignore.
+  }
+}
+
+const cache = loadCacheFromStorage();
 
 // Track mints that have recently failed so we don't hammer the endpoint.
 // Each entry stores the timestamp of the failure and whether it was definitive
@@ -104,8 +126,9 @@ export function useTokenMetadata(mints: string[]): Map<string, KnownToken> {
             symbol: result.symbol ?? `${mint.slice(0, 4)}…${mint.slice(-4)}`,
             decimals: result.decimals,
           };
-          // Only cache successful lookups.
+          // Only cache successful lookups; also persist to localStorage for next page load.
           cache.set(mint, entry);
+          saveCacheToStorage(cache);
           setResolved((prev) => {
             const next = new Map(prev);
             next.set(mint, entry);

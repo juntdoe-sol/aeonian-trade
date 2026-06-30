@@ -27,11 +27,12 @@ import {
   getAllPendingSocialClaims,
 } from '../collections/pendingSocialClaims.js';
 import { getAllPhoenixOrder } from '../collections/phoenixOrder.js';
-import { setPhoenixTradeRecord, getPhoenixTradeRecord } from '../collections/phoenixTradeRecord.js';
+import { setPhoenixTradeRecord, getPhoenixTradeRecord, getManyPhoenixTradeRecord } from '../collections/phoenixTradeRecord.js';
+import { getAllPhoenixIsoTrade } from '../collections/phoenixIsoTrade.js';
 import { setPhoenixWins } from '../collections/phoenixWins.js';
 import { notifyFollowers } from '../utils/notify-followers.js';
 import { notifyNewFollower } from '../utils/notify-new-follower.js';
-import { getAllPhoenixTrader } from '../collections/phoenixTrader.js';
+import { getAllPhoenixTrader, countPhoenixTrader } from '../collections/phoenixTrader.js';
 import { getAllUserPoints, buildUserPoints, buildUpdateUserPoints } from '../collections/userPoints.js';
 import { getAllPointsActivity, buildPointsActivity } from '../collections/pointsActivity.js';
 import { setMany, Address, Time } from '../db-client.js';
@@ -54,6 +55,9 @@ const SOLANA_ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 // Module-level in-memory cache for markets-overview (20s TTL)
 let marketsOverviewCache: { data: unknown; expiresAt: number } | null = null;
 
+// Module-level in-memory cache for total 24h volume across all Phoenix markets (60s TTL)
+let totalVolumeCache: { totalVolume24h: number; expiresAt: number } | null = null;
+
 // Module-level in-memory cache for phoenix global stats (5 min TTL)
 let phoenixRankingCache: { data: unknown; expiresAt: number } | null = null;
 
@@ -66,6 +70,17 @@ const TRADER_CACHE_TTL_MS = 120_000;
 // Guards against load-balanced upstream returning all-zero candles.
 const candlesNonZeroCache = new Map<string, { data: unknown; ts: number }>();
 const CANDLES_CACHE_TTL_MS = 60_000;
+
+// Module-level in-memory cache for trading news RSS feed (10 min TTL)
+let tradingNewsCache: { items: TradingNewsItem[]; expiresAt: number } | null = null;
+const TRADING_NEWS_TTL_MS = 600_000;
+
+interface TradingNewsItem {
+  title: string;
+  link: string;
+  pubDate: string;
+  source: string;
+}
 
 // Module-level last-known-good cache for specific subaccount states.
 // Cache key = "authority:index". Same TTL as the authority-level cache.
@@ -158,6 +173,7 @@ export const routeSpec: RouteSpec[] = [
   // Phoenix proxy routes
   { method: 'GET', path: '/api/phoenix/snapshot', description: 'Phoenix exchange snapshot (all markets)', auth: false },
   { method: 'GET', path: '/api/phoenix/markets-overview', description: 'All markets with live prices and 24h change in one call', auth: false },
+  { method: 'GET', path: '/api/phoenix/total-volume', description: 'Total 24h trading volume across all active Phoenix markets (server-aggregated from candles, cached 60s)', auth: false },
   { method: 'GET', path: '/api/phoenix/candles', description: 'Phoenix candles (live prices) for a symbol', auth: false },
   { method: 'GET', path: '/api/phoenix/market/:symbol', description: 'Phoenix market details by symbol', auth: false },
   { method: 'GET', path: '/api/phoenix/orderbook/:symbol', description: 'Phoenix orderbook for a symbol', auth: false },
@@ -186,6 +202,8 @@ export const routeSpec: RouteSpec[] = [
   // Social claim routes
   { method: 'POST', path: '/api/social/claim/twitter', description: 'Claim Twitter follow reward', auth: true },
   { method: 'POST', path: '/api/social/claim/telegram', description: 'Claim Telegram join reward', auth: true },
+  // Admin analytics route
+  { method: 'GET', path: '/api/admin/analytics', description: 'Admin performance analytics (users, traders, volume) for a given time range', auth: true },
   // Admin social claim routes
   { method: 'POST', path: '/api/admin/social/approve', description: 'Admin: approve pending social claim and award points', auth: true },
   { method: 'GET', path: '/api/admin/social/pending', description: 'Admin: list pending social claims', auth: true },
@@ -197,6 +215,8 @@ export const routeSpec: RouteSpec[] = [
   { method: 'GET', path: '/api/oauth/callback', description: 'OAuth callback', auth: false },
   { method: 'GET', path: '/api/social-links/:provider', description: 'Get social link', auth: true },
   { method: 'DELETE', path: '/api/social-links/:provider', description: 'Unlink social account', auth: true },
+  // Trading news RSS feed
+  { method: 'GET', path: '/api/news/trading', description: 'General trading/crypto news from free RSS feeds, cached 10 minutes', auth: false },
 ];
 
 export function registerRoutes(app: Hono): void {
@@ -313,20 +333,39 @@ export function registerRoutes(app: Hono): void {
         // OKX unavailable — fall through to Pyth + candles for all markets
       }
 
-      // ── LAYER 2: Pyth Hermes batch (commodity markets) ───────────────────
-      // Feed IDs verified 2026-05-29. WTIOIL uses front-month June 2026 (WTIM6)
-      // with July 2026 (WTIN6) as secondary; these are the nearest WTI futures
-      // contracts currently active on Pyth.
+      // ── LAYER 2: Pyth Hermes batch (commodities + equities + crypto) ─────
+      // Feed IDs verified 2026-06-29.
+      // WTIOIL uses front-month June 2026 (WTIM6) with July 2026 (WTIN6) as secondary.
+      // COPPER (Metal.XCU/USD) feed consistently returns price=0 — removed; falls to candle.
+      // Equity feeds (Pyth Pro) return 24/7 prices based on last close when markets are shut.
+      // SKR, SPCX: no Pyth feed found — fall through to candle.
       const PYTH_FEEDS: Record<string, { ids: string[] }> = {
-        GOLD: { ids: ['765d2ba906dbc32ca17cc11f5310a89e9ee1f6420508c63861f2f8ba4ee34bb2'] },
-        SILVER: { ids: ['f2fb02c32b055c805e7238d628e5e9dadef274376114eb1f012337cabe93871e'] },
-        COPPER: { ids: ['636bedafa14a37912993f265eda22431a2be363ad41a10276424bbe1b7f508c4'] },
+        // ── Commodities ──────────────────────────────────────────────────────
+        GOLD:    { ids: ['765d2ba906dbc32ca17cc11f5310a89e9ee1f6420508c63861f2f8ba4ee34bb2'] },
+        SILVER:  { ids: ['f2fb02c32b055c805e7238d628e5e9dadef274376114eb1f012337cabe93871e'] },
         WTIOIL: {
           ids: [
             '6a60b0d1ea6809b47dbe599f24a71c8bda335aa5c77e503e7260cde5ba2f4694', // WTIM6 (June 2026)
             'ce4c15100156d27c8bdd044d9804294e7bc0944dbb5b2b82a61a7aa85b6b3a5e', // WTIN6 (July 2026)
           ],
         },
+        // ── US Equities (Pyth Pro) ────────────────────────────────────────────
+        AAPL:   { ids: ['49f6b65cb1de6b10eaf75e7c03ca029c306d0357e91b5311b175084a5ad55688'] },
+        MSFT:   { ids: ['d0ca23c1cc005e004ccf1db5bf76aeb6a49218f43dac3d4b275e92de12ded4d1'] },
+        TSLA:   { ids: ['16dad506d7db8da01c87581c87ca897a012a153557d4d578c3b9c9e1bc0632f1'] },
+        NVDA:   { ids: ['b1073854ed24cbc755dc527418f52b7d271f6cc967bbf8d8129112b18860a593'] },
+        GOOGL:  { ids: ['5a48c03e9b9cb337801073ed9d166817473697efff0d138874e0f6a33d6d5aa6'] },
+        AMZN:   { ids: ['b5d0e0fa58a1f8b81498ae670ce93c872d14434b72c364885d4fa1b257cbb07a'] },
+        META:   { ids: ['78a3e3b8e676a8f73c439f5d749737034b139bbbe899ba5775216fba596607fe'] },
+        AMD:    { ids: ['3622e381dbca2efd1859253763b1adc63f7f9abb8e76da1aa8e638a57ccde93e'] },
+        INTC:   { ids: ['c1751e085ee292b8b3b9dd122a135614485a201c35dfc653553f0e28c1baf3ff'] },
+        MU:     { ids: ['152244dc24665ca7dd3f257b8f442dc449b6346f48235b7b229268cb770dda2d'] },
+        SNDK:   { ids: ['c86a1f20cd7d5d07932baea30bcd8e479b775c4f51f82526bf1de6dc79fa3f76'] },
+        CRWV:   { ids: ['2a78b78189d6d6eff30a825e4698fd14a0b1ca659bb0079bb7e80521c0e8c75d'] },
+        // ── Crypto (not on OKX spot or falling through) ──────────────────────
+        TAO:      { ids: ['410f41de235f2db824e562ea7ab2d3d3d4ff048316c61d629c0b93f58584e1af'] },
+        FARTCOIN: { ids: ['58cd29ef0e714c5affc44f269b2c1899a52da4169d7acc147b9da692e6953608'] },
+        VVV:      { ids: ['5ece7483ae221e3645ec0f9b5c6671ac830cb85471744df5d8e7deae152e31a2'] },
       };
 
       interface PythPrice {
@@ -356,8 +395,10 @@ export function registerRoutes(app: Hono): void {
               for (const entry of pythBody.parsed) {
                 const rawPrice = parseFloat(entry.price.price);
                 const expo = entry.price.expo;
-                if (!isNaN(rawPrice)) {
+                if (!isNaN(rawPrice) && rawPrice !== 0) {
                   const decoded = rawPrice * Math.pow(10, expo);
+                  // Skip feeds returning zero price (stale/inactive feed)
+                  if (decoded <= 0) continue;
                   // Map by feed ID (normalized to lowercase for lookup)
                   const normalId = entry.id.toLowerCase().replace(/^0x/, '');
                   // Find the symbol this ID belongs to
@@ -503,6 +544,67 @@ export function registerRoutes(app: Hono): void {
       return sendSuccess(c, result);
     } catch {
       return ApiErrors.internal(c, 'Phoenix API unreachable');
+    }
+  });
+
+  // Total 24h volume — server-aggregated sum of volumeQuote from the most recent 1d candle
+  // across all active Phoenix markets. Cached 60s so the footer never fans out client-side.
+  app.get('/api/phoenix/total-volume', async (c) => {
+    if (totalVolumeCache && Date.now() < totalVolumeCache.expiresAt) {
+      return sendSuccess(c, { totalVolume24h: totalVolumeCache.totalVolume24h });
+    }
+    try {
+      // Step 1: fetch the authoritative market list from Phoenix /exchange
+      const exchangeRes = await fetch('https://public-api.phoenix.trade/exchange');
+      if (!exchangeRes.ok) return ApiErrors.internal(c, `Phoenix exchange upstream ${exchangeRes.status}`);
+      const exchangeData = (await exchangeRes.json()) as unknown;
+      const rawList = Array.isArray(exchangeData)
+        ? exchangeData
+        : Array.isArray((exchangeData as Record<string, unknown>)?.markets)
+        ? (exchangeData as Record<string, unknown>).markets
+        : [];
+      const activeMarkets = (rawList as Array<Record<string, unknown>>)
+        .filter((m) => m.marketStatus === 'active')
+        .map((m) => String(m.symbol ?? '').replace(/-PERP$/i, '').toUpperCase())
+        .filter(Boolean);
+
+      if (activeMarkets.length === 0) {
+        return sendSuccess(c, { totalVolume24h: 0 });
+      }
+
+      // Step 2: fetch the most recent 1d candle for each market and sum volumeQuote.
+      // Fan-out happens server-side (not client-side) so the browser fires one request.
+      type Candle = { time?: number; volumeQuote?: number; volume?: number };
+      const candleFetches = activeMarkets.map(async (bareSymbol): Promise<number> => {
+        try {
+          const url = new URL(`${PHOENIX_API_BASE_URL}/candles`);
+          url.searchParams.set('symbol', bareSymbol);
+          url.searchParams.set('timeframe', '1d');
+          url.searchParams.set('limit', '1');
+          const res = await fetch(url.toString());
+          if (!res.ok) return 0;
+          const raw = (await res.json()) as Candle[] | { data?: Candle[]; candles?: Candle[] };
+          const arr: Candle[] = Array.isArray(raw)
+            ? raw
+            : (raw as { data?: Candle[] }).data ?? (raw as { candles?: Candle[] }).candles ?? [];
+          if (arr.length === 0) return 0;
+          // Most recent candle is the last element (candles come back oldest-first)
+          const sorted = [...arr].sort((a, b) => (b.time ?? 0) - (a.time ?? 0));
+          const latest = sorted[0];
+          const vol = latest?.volumeQuote ?? latest?.volume;
+          return typeof vol === 'number' && vol > 0 ? vol : 0;
+        } catch {
+          return 0;
+        }
+      });
+
+      const volumes = await Promise.all(candleFetches);
+      const totalVolume24h = volumes.reduce((acc, v) => acc + v, 0);
+
+      totalVolumeCache = { totalVolume24h, expiresAt: Date.now() + 60_000 };
+      return sendSuccess(c, { totalVolume24h });
+    } catch {
+      return ApiErrors.internal(c, 'Phoenix total-volume aggregation failed');
     }
   });
 
@@ -2201,6 +2303,133 @@ export function registerRoutes(app: Hono): void {
     return sendSuccess(c, { claims: filtered });
   });
 
+  // ── Admin Analytics Route ────────────────────────────────────────────────
+  // Returns trading platform metrics for a given time range.
+  // Uses tarobase_created_at on phoenixTrader (no explicit createdAt field)
+  // and createdAt on phoenixTradeRecord (set by the backend at record write time).
+  // Trading Volume combines:
+  //   - Cross-margin: phoenixTradeRecord.sizeUsd, filtered by createdAt >= cutoff
+  //   - Isolated-margin: phoenixIsoTrade.sizeUsd, filtered in JS by tarobase_created_at >= cutoff
+  //     (phoenixIsoTrade is a frontend-signed onchain passthrough with no explicit createdAt)
+  app.get('/api/admin/analytics', async (c) => {
+    const { walletAddress: _adminWallet } = await validatePoofAuth(c, true);
+
+    // Parse and validate range param
+    const rangeParam = c.req.query('range') ?? '7d';
+    const RANGE_SECONDS: Record<string, number> = {
+      '24h': 86400,
+      '7d': 604800,
+      '1m': 2592000,
+      '3m': 7776000,
+      '6m': 15552000,
+      '1y': 31536000,
+    };
+    const rangeSeconds = RANGE_SECONDS[rangeParam] ?? RANGE_SECONDS['7d'];
+    const effectiveRange = RANGE_SECONDS[rangeParam] ? rangeParam : '7d';
+    const cutoffSeconds = Math.floor(Date.now() / 1000) - rangeSeconds;
+
+    // Fetch all trade records, traders, and iso trades concurrently.
+    // Trade records: filter by createdAt >= cutoff (set explicitly by backend at write time).
+    // Traders: fetched all at once; we filter for newUsers using tarobase_created_at in JS.
+    // Iso trades: fetched all at once; filter by tarobase_created_at in JS (no createdAt field).
+    const [allTraders, allTradeRecords, allIsoTrades] = await Promise.all([
+      getAllPhoenixTrader(),
+      getManyPhoenixTradeRecord(`createdAt >= ${cutoffSeconds}`),
+      getAllPhoenixIsoTrade(),
+    ]);
+
+    // totalUsers: all registered traders regardless of range
+    const totalUsers = allTraders.length;
+
+    // newUsers: traders registered within the range (tarobase_created_at is the only timestamp)
+    const newUsers = allTraders.filter(
+      (t) => typeof t.tarobase_created_at === 'number' && t.tarobase_created_at >= cutoffSeconds,
+    ).length;
+
+    // Build per-wallet trade counts from cross-margin records in range
+    // Also bucket by calendar day (UTC) for the daily active traders chart.
+    const walletTradeCounts = new Map<string, number>();
+    // dayKey -> Set of distinct trader wallets that traded that day
+    const dailyWallets = new Map<string, Set<string>>();
+    let tradingVolumeCross = 0;
+
+    for (const record of allTradeRecords) {
+      const wallet = typeof record.trader === 'string' ? record.trader : '';
+      if (!wallet) continue;
+      walletTradeCounts.set(wallet, (walletTradeCounts.get(wallet) ?? 0) + 1);
+      tradingVolumeCross += typeof record.sizeUsd === 'number' ? record.sizeUsd : 0;
+
+      // Bucket into calendar day (UTC). createdAt is Unix seconds.
+      const ts = typeof record.createdAt === 'number' ? record.createdAt : 0;
+      if (ts > 0) {
+        // Format as YYYY-MM-DD in UTC
+        const d = new Date(ts * 1000);
+        const dayKey = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+        if (!dailyWallets.has(dayKey)) dailyWallets.set(dayKey, new Set());
+        dailyWallets.get(dayKey)!.add(wallet);
+      }
+    }
+
+    // Build a dense day-by-day series over the selected range so the chart
+    // has a data point for every day (zero-filling days with no trades).
+    // For ranges ≤ 30 days we enumerate every calendar day; for longer ranges
+    // we still enumerate every day — the frontend can decide how to render.
+    const nowMs = Date.now();
+    const dailyActiveTraders: { date: string; count: number }[] = [];
+    // Walk from the cutoff day to today (UTC), inclusive on both ends.
+    const startDayMs = new Date(cutoffSeconds * 1000);
+    // Normalise to midnight UTC of the cutoff day
+    const startMidnightMs = Date.UTC(
+      startDayMs.getUTCFullYear(),
+      startDayMs.getUTCMonth(),
+      startDayMs.getUTCDate(),
+    );
+    const MS_PER_DAY = 86400_000;
+    for (let dayMs = startMidnightMs; dayMs <= nowMs; dayMs += MS_PER_DAY) {
+      const d = new Date(dayMs);
+      const dayKey = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+      dailyActiveTraders.push({
+        date: dayKey,
+        count: dailyWallets.get(dayKey)?.size ?? 0,
+      });
+    }
+
+    // Isolated-margin volume: filter in JS by tarobase_created_at (no explicit createdAt field)
+    let tradingVolumeIsolated = 0;
+    for (const isoTrade of allIsoTrades) {
+      if (
+        typeof isoTrade.tarobase_created_at === 'number' &&
+        isoTrade.tarobase_created_at >= cutoffSeconds
+      ) {
+        tradingVolumeIsolated += typeof isoTrade.sizeUsd === 'number' ? isoTrade.sizeUsd : 0;
+      }
+    }
+
+    // Combined volume for the headline number
+    const tradingVolume = tradingVolumeCross + tradingVolumeIsolated;
+
+    // activeTraders: unique wallets with any trade in range (cross-margin only, per scope)
+    const activeTraders = walletTradeCounts.size;
+
+    // returningUsers: wallets with more than 1 trade in range (cross-margin only, per scope)
+    let returningUsers = 0;
+    for (const count of walletTradeCounts.values()) {
+      if (count > 1) returningUsers++;
+    }
+
+    return sendSuccess(c, {
+      range: effectiveRange,
+      totalUsers,
+      newUsers,
+      activeTraders,
+      returningUsers,
+      tradingVolume,
+      tradingVolumeCross,
+      tradingVolumeIsolated,
+      dailyActiveTraders,
+    });
+  });
+
   // ── Image Proxy Route ────────────────────────────────────────────────────
   // Fetches a Tarobase public S3 image server-side (no CORS restriction) and
   // streams it back. This solves the problem where custom domains (e.g.
@@ -2564,6 +2793,7 @@ export function registerRoutes(app: Hono): void {
       return ApiErrors.notFound(c, 'That address is not a valid SPL token mint.');
     }
 
+    c.header('Cache-Control', 'public, max-age=86400');
     return sendSuccess(c, {
       mint,
       decimals,
@@ -2571,6 +2801,68 @@ export function registerRoutes(app: Hono): void {
       name,
       logoUri,
     });
+  });
+
+  // ── Trading News RSS ──────────────────────────────────────────────────────────
+  app.get('/api/news/trading', async (c) => {
+    const now = Date.now();
+    if (tradingNewsCache && now < tradingNewsCache.expiresAt) {
+      return sendSuccess(c, { items: tradingNewsCache.items });
+    }
+
+    const feeds: Array<{ url: string; source: string }> = [
+      { url: 'https://www.coindesk.com/arc/outboundfeeds/rss/', source: 'CoinDesk' },
+      { url: 'https://feeds.a.dj.com/rss/RSSMarketsMain.xml', source: 'WSJ Markets' },
+    ];
+
+    const parseItems = (xml: string, source: string): TradingNewsItem[] => {
+      const items: TradingNewsItem[] = [];
+      // Extract all <item> blocks
+      const itemRegex = /<item[^>]*>([\s\S]*?)<\/item>/gi;
+      let m: RegExpExecArray | null;
+      while ((m = itemRegex.exec(xml)) !== null) {
+        const block = m[1];
+        const titleMatch = block.match(/<title>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/i);
+        const linkMatch = block.match(/<link[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/link>/i)
+          || block.match(/<link\s+[^>]*href="([^"]+)"/i);
+        const dateMatch = block.match(/<pubDate[^>]*>([\s\S]*?)<\/pubDate>/i)
+          || block.match(/<dc:date[^>]*>([\s\S]*?)<\/dc:date>/i);
+        const title = titleMatch?.[1]?.trim().replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+        const link = linkMatch?.[1]?.trim();
+        const pubDate = dateMatch?.[1]?.trim() ?? '';
+        if (title && link) {
+          items.push({ title, link, pubDate, source });
+        }
+      }
+      return items;
+    };
+
+    const allItems: TradingNewsItem[] = [];
+    for (const feed of feeds) {
+      try {
+        const resp = await fetch(feed.url, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; AEONIAN/1.0)' },
+          signal: AbortSignal.timeout(6_000),
+        });
+        if (resp.ok) {
+          const xml = await resp.text();
+          allItems.push(...parseItems(xml, feed.source));
+        }
+      } catch {
+        // Ignore individual feed errors — just skip that feed
+      }
+    }
+
+    // Sort by pubDate desc (most recent first), take top 12
+    allItems.sort((a, b) => {
+      const ta = a.pubDate ? new Date(a.pubDate).getTime() : 0;
+      const tb = b.pubDate ? new Date(b.pubDate).getTime() : 0;
+      return tb - ta;
+    });
+    const items = allItems.slice(0, 12);
+
+    tradingNewsCache = { items, expiresAt: now + TRADING_NEWS_TTL_MS };
+    return sendSuccess(c, { items });
   });
 
   // ── OAuth Routes ─────────────────────────────────────────────────────────────

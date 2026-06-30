@@ -1,0 +1,171 @@
+{
+  "version": "1",
+  "kind": "bootstrap",
+  "scope": "seed-data",
+  "executionTarget": "server",
+  "description": "Seed 15 realistic phoenixWins records for the Arena Wins ticker and BigWin popup. Written as the vault address (PROJECT_VAULT_ADDRESS) since only the vault can create wins.",
+  "targetEnvironments": ["mock"],
+  "bootstrapType": "seed-data",
+  "clearFirst": false,
+  "actors": {
+    "vault": "FubCb8B3AxFyyWfcPdvb3MpkuteGzu77Y7dXd34sJyKZ"
+  },
+  "steps": [
+    { "op": "as", "who": "vault" },
+    {
+      "op": "setMany",
+      "writes": [
+        {
+          "path": "phoenixWins/mockwin1",
+          "data": {
+            "trader": "7DPo82TQ3A6LUY83WgeTbjCZjWeWvmFd2RM4iz9Fq1Zt",
+            "symbol": "SOL",
+            "market": "71Si24E4uc3oCaPbPZTozC1ptSNNqygjjebxSmErSsC2",
+            "pnlUsdCents": 3450,
+            "createdAt": 1750453200
+          }
+        },
+        {
+          "path": "phoenixWins/mockwin2",
+          "data": {
+            "trader": "6WXAuBo2SzJpPPxFH8xntA2VW7ZBjrw94FQg3kAzE9CV",
+            "symbol": "BTC",
+            "market": "AXFz1MuzMUBHi5UKJuK3FDCQ73o3rSzubGU2mPr4LLU7",
+            "pnlUsdCents": 128400,
+            "createdAt": 1750453800
+          }
+        },
+        {
+          "path": "phoenixWins/mockwin3",
+          "data": {
+            "trader": "kT5RRttCEocXKUYMLzACDYnoSYc6S3TRQ261txN9opm",
+            "symbol": "ETH",
+            "market": "9u7aqptdRFbsnnoHtjK13E5JkeM14EW5fAKTRPidVF88",
+            "pnlUsdCents": 8720,
+            "createdAt": 1750454600
+          }
+        },
+        {
+          "path": "phoenixWins/mockwin4",
+          "data": {
+            "trader": "J9SYW7ETaz7GQPKHkLyarU7MKgd1BRx2Gsm91M5omYbj",
+            "symbol": "DOGE",
+            "market": "Hqt5Vom5L3X3RcKysKnBmLAvjYgo6TGAwoheW658h5cz",
+            "pnlUsdCents": 1250,
+            "createdAt": 1750455200
+          }
+        },
+        {
+          "path": "phoenixWins/mockwin5",
+          "data": {
+            "trader": "3TzeNzsMzQhG8hST1W4wC2oAZeVrgg9i7f8ZbUzGjBtD",
+            "symbol": "SUI",
+            "market": "GQS3qn9EjKYpqoLwpvPVbeW9o1bjFYhc1SRMZYw4iNru",
+            "pnlUsdCents": 6180,
+            "createdAt": 1750455900
+          }
+        },
+        {
+          "path": "phoenixWins/mockwin6",
+          "data": {
+            "trader": "2JrxcpooQNe26wRskgRnV5ZXp1K2EfHV7x7gdvLwh4EP",
+            "symbol": "XRP",
+            "market": "CwaHtR69D287PLnoX8zzzk1zqwNQKVJiJQTNs6JrVyna",
+            "pnlUsdCents": 500,
+            "createdAt": 1750456600
+          }
+        },
+        {
+          "path": "phoenixWins/mockwin7",
+          "data": {
+            "trader": "Gsq8gWzsJxzUNS7qUjzeVbPFnnBbNpaUbD9XrgCxpfyx",
+            "symbol": "SOL",
+            "market": "71Si24E4uc3oCaPbPZTozC1ptSNNqygjjebxSmErSsC2",
+            "pnlUsdCents": 245000,
+            "createdAt": 1750457300
+          }
+        },
+        {
+          "path": "phoenixWins/mockwin8",
+          "data": {
+            "trader": "D3eNLCyxRaZPWZZYHNk12nwQCFpLb2govcSSYQANyEnt",
+            "symbol": "BTC",
+            "market": "AXFz1MuzMUBHi5UKJuK3FDCQ73o3rSzubGU2mPr4LLU7",
+            "pnlUsdCents": 19800,
+            "createdAt": 1750458000
+          }
+        },
+        {
+          "path": "phoenixWins/mockwin9",
+          "data": {
+            "trader": "9CBK9G2WP1ty9sddG8NDViFYBK1aZUoZ36xpgBjDfEBH",
+            "symbol": "ETH",
+            "market": "9u7aqptdRFbsnnoHtjK13E5JkeM14EW5fAKTRPidVF88",
+            "pnlUsdCents": 4300,
+            "createdAt": 1750458700
+          }
+        },
+        {
+          "path": "phoenixWins/mockwin10",
+          "data": {
+            "trader": "ngSHvLbuLPuWu728uUX8gdrxeJcSVL1rg3mRq4MJL39",
+            "symbol": "DOGE",
+            "market": "Hqt5Vom5L3X3RcKysKnBmLAvjYgo6TGAwoheW658h5cz",
+            "pnlUsdCents": 2100,
+            "createdAt": 1750459400
+          }
+        },
+        {
+          "path": "phoenixWins/mockwin11",
+          "data": {
+            "trader": "5C3SJAG5CLyM5d1NGt25o8HKQmXy9gqQ92gyz3TLx9zJ",
+            "symbol": "SUI",
+            "market": "GQS3qn9EjKYpqoLwpvPVbeW9o1bjFYhc1SRMZYw4iNru",
+            "pnlUsdCents": 385000,
+            "createdAt": 1750460100
+          }
+        },
+        {
+          "path": "phoenixWins/mockwin12",
+          "data": {
+            "trader": "GHNj4qU3WqL8Ed474RQqzQAqLBhipxSkgpRuZ9KpPRhS",
+            "symbol": "XRP",
+            "market": "CwaHtR69D287PLnoX8zzzk1zqwNQKVJiJQTNs6JrVyna",
+            "pnlUsdCents": 750,
+            "createdAt": 1750460800
+          }
+        },
+        {
+          "path": "phoenixWins/mockwin13",
+          "data": {
+            "trader": "7DPo82TQ3A6LUY83WgeTbjCZjWeWvmFd2RM4iz9Fq1Zt",
+            "symbol": "BTC",
+            "market": "AXFz1MuzMUBHi5UKJuK3FDCQ73o3rSzubGU2mPr4LLU7",
+            "pnlUsdCents": 11600,
+            "createdAt": 1750461500
+          }
+        },
+        {
+          "path": "phoenixWins/mockwin14",
+          "data": {
+            "trader": "6cMTLKgFuUzZaFV7qjWL5x56xrEDgJidr52p9kZtd4A1",
+            "symbol": "SOL",
+            "market": "71Si24E4uc3oCaPbPZTozC1ptSNNqygjjebxSmErSsC2",
+            "pnlUsdCents": 56700,
+            "createdAt": 1750462200
+          }
+        },
+        {
+          "path": "phoenixWins/mockwin15",
+          "data": {
+            "trader": "xu5DcZMYdn1f1y8bSbLhzTzNDmgL3tF8AQ2U29MMQ7A",
+            "symbol": "ETH",
+            "market": "9u7aqptdRFbsnnoHtjK13E5JkeM14EW5fAKTRPidVF88",
+            "pnlUsdCents": 9400,
+            "createdAt": 1750463000
+          }
+        }
+      ]
+    }
+  ]
+}

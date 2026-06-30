@@ -21,7 +21,7 @@ export function OpenOrdersTable({ orders, loading, onCancel, showSymbol = true }
 
   if (orders.length === 0) {
     return (
-      <div className='glass-card rounded-xl p-6 text-center'>
+      <div className='p-6 text-center'>
         <p className='text-sm' style={{ color: '#8A8A8A' }}>No open orders</p>
       </div>
     );
@@ -34,7 +34,11 @@ export function OpenOrdersTable({ orders, loading, onCancel, showSymbol = true }
         return (
           <div
             key={order.orderId ?? i}
-            className='glass-card rounded-xl p-3 flex items-center justify-between gap-3'
+            className='rounded-xl p-3 flex items-center justify-between gap-3 transition-colors'
+            style={{
+              background: 'transparent',
+              border: 'none',
+            }}
           >
             <div className='space-y-1 min-w-0'>
               <div className='flex items-center gap-2 flex-wrap'>

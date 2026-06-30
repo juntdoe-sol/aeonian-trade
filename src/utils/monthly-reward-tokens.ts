@@ -22,6 +22,7 @@ export interface KnownToken {
 export const KNOWN_TOKENS: KnownToken[] = [
   { mint: SOL, symbol: 'SOL', decimals: 9 },
   { mint: USDC, symbol: 'USDC', decimals: 6 },
+  { mint: 'SKRbvo6Gf7GondiT3BbTfuRDPqLWei4j2Qy2NPGZhW3', symbol: 'SKR', decimals: 6 },
 ];
 
 const BY_MINT = new Map(KNOWN_TOKENS.map((t) => [t.mint, t]));

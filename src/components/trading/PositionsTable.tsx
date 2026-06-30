@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { ShieldAlert } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 import { TokenLogo } from '@/components/TokenLogo';
 import { useRealtimeData } from '@/hooks/use-realtime-data';
 import { subscribeManyPhoenixSubaccount, type PhoenixSubaccountResponse } from '@/lib/collections/phoenixSubaccount';
 import { useAuth } from '@pooflabs/web';
-import { formatPrice, formatUsd, getLiqRisk, LIQ_RISK_DANGER, type LiqRisk, type TraderPosition } from './types';
+import { formatPrice, formatUsd, getLiqRisk, type LiqRisk, type TraderPosition } from './types';
 import { OpenPositionShareModal } from './OpenPositionShareModal';
+import { PositionManageSheet } from './PositionManageSheet';
 
 interface PositionsTableProps {
   positions: TraderPosition[];
@@ -30,8 +30,8 @@ function posKey(pos: TraderPosition): string {
 
 export function PositionsTable({ positions, loading, onClose, closeDisabled, closingKey, liveMarkBySymbol }: PositionsTableProps) {
   const { user } = useAuth();
-  const navigate = useNavigate();
   const [sharePosition, setSharePosition] = useState<TraderPosition | null>(null);
+  const [managePosition, setManagePosition] = useState<TraderPosition | null>(null);
   const { data: subaccounts } = useRealtimeData<PhoenixSubaccountResponse[]>(
     subscribeManyPhoenixSubaccount,
     !!user?.address,
@@ -51,7 +51,7 @@ export function PositionsTable({ positions, loading, onClose, closeDisabled, clo
 
   if (positions.length === 0) {
     return (
-      <div className='glass-card rounded-xl p-6 text-center'>
+      <div className='p-6 text-center'>
         <p className='text-sm' style={{ color: '#8A8A8A' }}>No open positions</p>
       </div>
     );
@@ -86,20 +86,42 @@ export function PositionsTable({ positions, loading, onClose, closeDisabled, clo
         return (
           <div
             key={i}
-            className='glass-card rounded-xl p-4 space-y-2.5 cursor-pointer'
-            onClick={() => navigate(`/trade/${pos.symbol ?? 'SOL-PERP'}`)}
+            role='button'
+            tabIndex={0}
+            className='rounded-xl p-4 space-y-2.5 cursor-pointer transition-colors'
+            style={{
+              background: 'transparent',
+              border: 'none',
+            }}
+            onClick={() => setManagePosition(pos)}
           >
             <div className='flex items-center justify-between'>
               <div className='flex items-center gap-2'>
                 {pos.symbol && <TokenLogo symbol={pos.symbol} size={22} />}
                 <span className='font-bold text-sm'>{pos.symbol}</span>
+                {pos._isMockDraftPosition && (
+                  <span
+                    className='text-[9px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wide'
+                    style={{
+                      background: 'rgba(251,191,36,0.12)',
+                      color: '#FBBF24',
+                      border: '1px solid rgba(251,191,36,0.25)',
+                      letterSpacing: '0.06em',
+                    }}
+                  >
+                    Test — draft only
+                  </span>
+                )}
               </div>
               <div className='flex items-center gap-2'>
                 <span
-                  className='text-xs font-bold px-2 py-0.5 rounded'
+                  className='text-xs font-semibold px-2 py-0.5 rounded'
                   style={{
-                    background: isLong ? 'rgba(74,222,128,0.15)' : 'rgba(255,82,82,0.15)',
+                    background: isLong ? 'rgba(74,222,128,0.10)' : 'rgba(255,82,82,0.10)',
                     color: isLong ? '#4ADE80' : '#FF5252',
+                    border: `1px solid ${isLong ? 'rgba(74,222,128,0.25)' : 'rgba(255,82,82,0.25)'}`,
+                    letterSpacing: '0.04em',
+                    textTransform: 'uppercase',
                   }}
                 >
                   {pos.side?.toUpperCase()} {pos.leverage != null ? `${pos.leverage}x` : ''}
@@ -114,11 +136,13 @@ export function PositionsTable({ positions, loading, onClose, closeDisabled, clo
                 )}
                 <button
                   onClick={(e) => { e.stopPropagation(); setSharePosition(pos); }}
-                  className='text-xs font-bold px-2.5 py-1 rounded-lg transition-all'
+                  className='text-xs font-semibold px-2.5 py-1 rounded-lg transition-all'
                   style={{
-                    background: 'rgba(99,102,241,0.15)',
-                    color: '#818cf8',
-                    border: '1px solid rgba(99,102,241,0.25)',
+                    background: 'rgba(255,255,255,0.07)',
+                    color: '#FFFFFF',
+                    border: '1px solid rgba(255,255,255,0.15)',
+                    letterSpacing: '0.04em',
+                    textTransform: 'uppercase',
                     cursor: 'pointer',
                   }}
                   title='Share position'
@@ -159,6 +183,10 @@ export function PositionsTable({ positions, loading, onClose, closeDisabled, clo
                   liveMarkBySymbol?.get(pos.symbol ?? '') ?? pos.markPrice
                 )}</div>
               </div>
+              <div>
+                <div style={{ color: '#8A8A8A' }}>Margin</div>
+                <div className='tabular-nums font-medium'>{formatUsd(pos.initialMargin)}</div>
+              </div>
             </div>
             <div className='text-xs tabular-nums' style={{ color: '#8A8A8A' }}>
               Liq: <span style={{ color: '#b794f6' }}>${formatPrice(pos.liquidationPrice)}</span>
@@ -195,6 +223,16 @@ export function PositionsTable({ positions, loading, onClose, closeDisabled, clo
       onClose={() => setSharePosition(null)}
       position={sharePosition}
       liveMark={sharePosition?.symbol ? liveMarkBySymbol?.get(sharePosition.symbol) : undefined}
+    />
+
+    <PositionManageSheet
+      open={!!managePosition}
+      onClose={() => setManagePosition(null)}
+      position={managePosition}
+      liveMark={managePosition?.symbol ? liveMarkBySymbol?.get(managePosition.symbol) : undefined}
+      onShare={managePosition ? () => { setManagePosition(null); setSharePosition(managePosition); } : undefined}
+      onClosePosition={onClose && managePosition ? () => { setManagePosition(null); onClose(managePosition); } : undefined}
+      closeDisabled={closeDisabled}
     />
     </>
   );
@@ -261,30 +299,27 @@ function CloseButton({ onClose, disabled, isClosing, isIsolated, risk }: CloseBu
     onClose();
   };
 
-  // Confirm-state color: use the position's risk tier when we have distance
-  // data, otherwise fall back to the danger red so it still reads as a warning.
-  const confirmColor = risk?.color ?? LIQ_RISK_DANGER;
   const hasDistance = confirming && risk?.distancePct != null;
 
   const label = isClosing
     ? 'Closing…'
     : confirming
       ? hasDistance
-        ? `Confirm close · ${risk!.distancePct!.toFixed(1)}% to liq`
-        : 'Confirm close'
+        ? `Confirm · ${risk!.distancePct!.toFixed(1)}%`
+        : 'Confirm'
       : 'Close';
-
-  const color = confirming ? confirmColor : '#FF5252';
 
   return (
     <button
       onClick={(e) => { e.stopPropagation(); handleClick(); }}
       disabled={disabled || isClosing}
-      className='text-xs font-bold px-2.5 py-1 rounded-lg transition-all disabled:opacity-40 tabular-nums'
+      className='text-xs font-semibold px-2.5 py-1 rounded-lg transition-all disabled:opacity-40 tabular-nums'
       style={{
-        background: confirming ? `${color}26` : 'rgba(255,82,82,0.15)',
-        color,
-        border: `1px solid ${confirming ? `${color}59` : 'rgba(255,82,82,0.25)'}`,
+        background: confirming ? `rgba(255,255,255,0.12)` : 'rgba(255,255,255,0.07)',
+        color: '#FFFFFF',
+        border: confirming ? '1px solid rgba(255,255,255,0.35)' : '1px solid rgba(255,255,255,0.15)',
+        letterSpacing: '0.04em',
+        textTransform: 'uppercase',
         cursor: disabled ? 'not-allowed' : 'pointer',
       }}
       title={confirming ? 'Click again to confirm closing this position' : undefined}

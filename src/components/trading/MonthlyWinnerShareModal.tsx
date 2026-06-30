@@ -12,6 +12,8 @@ import { getSocialLinks } from '@/lib/collections/socialLinks';
 import { useAuth } from '@pooflabs/web';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useAppLogo } from '@/hooks/use-app-logo';
+import { useDefaultAvatars } from '@/hooks/use-default-avatars';
+import { pickDefaultAvatar } from '@/utils/default-avatar';
 import {
   MonthlyWinnerShareCard,
   MonthlyWinnerOverlayCapture,
@@ -45,6 +47,7 @@ export function MonthlyWinnerShareModal({ open, onClose, winner }: MonthlyWinner
   const { user, login } = useAuth();
   const isMobile = useIsMobile();
   const platformLogoUrl = useAppLogo();
+  const defaultAvatarUrls = useDefaultAvatars();
 
   // Background data URL (capture-safe), module-cached.
   const [bgDataUrl, setBgDataUrl] = useState<string | undefined>(undefined);
@@ -92,7 +95,17 @@ export function MonthlyWinnerShareModal({ open, onClose, winner }: MonthlyWinner
       if (user?.address) {
         const storageKey = `social:${user.address}:twitter`;
         getSocialLinks(storageKey).then(async (link) => {
-          if (!link?.profile) return;
+          if (!link?.profile) {
+            // No X profile — fall back to the default avatar pool if available.
+            const fallbackUrl = pickDefaultAvatar(user.address, defaultAvatarUrls);
+            if (fallbackUrl) {
+              try {
+                const dataUrl = await remoteUrlToDataUrl(fallbackUrl);
+                setXAvatarDataUrl(dataUrl);
+              } catch { /* default avatar optional */ }
+            }
+            return;
+          }
           try {
             const parsed = typeof link.profile === 'string' ? JSON.parse(link.profile) : link.profile;
             if (!parsed?.username) return;
@@ -102,6 +115,15 @@ export function MonthlyWinnerShareModal({ open, onClose, winner }: MonthlyWinner
                 const dataUrl = await remoteUrlToDataUrl(parsed.avatar);
                 setXAvatarDataUrl(dataUrl);
               } catch { /* avatar optional */ }
+            } else {
+              // Has X username but no avatar — try default avatar pool.
+              const fallbackUrl = pickDefaultAvatar(user.address, defaultAvatarUrls);
+              if (fallbackUrl) {
+                try {
+                  const dataUrl = await remoteUrlToDataUrl(fallbackUrl);
+                  setXAvatarDataUrl(dataUrl);
+                } catch { /* default avatar optional */ }
+              }
             }
           } catch { /* malformed JSON */ }
         });
@@ -113,7 +135,7 @@ export function MonthlyWinnerShareModal({ open, onClose, winner }: MonthlyWinner
       setXAvatarDataUrl(undefined);
     }
     prevOpenRef.current = open;
-  }, [open, winner, user?.address]);
+  }, [open, winner, user?.address, defaultAvatarUrls]);
 
   const CARD_W = 800;
   const CARD_H = 400;

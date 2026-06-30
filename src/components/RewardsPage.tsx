@@ -836,111 +836,280 @@ export function RewardsPage() {
         </p>
       </div>
 
-      <div className='px-4 pt-2 space-y-2.5'>
-
-        {/* ── Your Points ────────────────────────────────────────────────── */}
-        {user ? (
-          <YourPointsCard
-            points={userPoints ?? null}
-            socialClaimsData={socialClaims ?? null}
-            onHowItWorks={() => setHowModalOpen(true)}
-          />
-        ) : (
-          <div className='glass-card rounded-xl p-3 text-center space-y-1.5'>
-            <Trophy size={18} style={{ color: '#F59E0B', margin: '0 auto' }} />
-            <p className='text-sm' style={{ color: '#8A8A8A' }}>Connect your wallet to see your points.</p>
-          </div>
-        )}
-
-        {/* ── Leaderboard ───────────────────────────────────────────────── */}
-        <div>
-          <h2 className='text-xs font-semibold uppercase tracking-wider mb-1.5' style={{ color: '#8A8A8A' }}>
-            Leaderboard
-          </h2>
-          <div className='glass-card rounded-xl overflow-hidden'>
-            {leaderboard.length === 0 ? (
-              <p className='py-4 text-center text-xs' style={{ color: '#8A8A8A' }}>
-                No data yet. Be the first on the leaderboard!
-              </p>
-            ) : (
-              <div className='px-1.5 py-1.5 space-y-0 overflow-y-auto' style={{ maxHeight: '360px' }}>
-                {leaderboard.map((entry, idx) => (
-                  <LeaderboardRow
-                    key={entry.id ?? entry.address}
-                    rank={idx + 1}
-                    entry={entry}
-                    isCurrentUser={!!user?.address && user.address === entry.address}
-                    isAdmin={isAdmin}
-                    onDelete={isAdmin ? handleDeleteUserRewardData : undefined}
-                    xProfile={xProfileMap.get(entry.address) ?? null}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* ── Social Rewards — collapsible on mobile ────────────────────── */}
-        <MobileCollapsibleSection title='Social Rewards' storageKey='aeonian:cardCollapsed:rewards:socialRewards'>
-          <div className='grid grid-cols-1 md:grid-cols-2 gap-2'>
-            <SocialRewardCard
-              title='Follow AEONIAN on X'
-              description='Follow @Aeonian_Arena to earn one-time social points.'
-              icon={<Twitter size={16} style={{ color: '#1D9BF0' }} />}
-              linkLabel='Follow on X'
-              linkHref='https://x.com/Aeonian_Arena'
-              claimed={socialClaims?.twitterFollowClaimed ?? false}
-              pending={pendingSocialClaims?.twitterFollowPending ?? false}
-              onClaim={claimTwitterFollow}
-              claiming={claimingTwitter}
-            />
-            <SocialRewardCard
-              title='Join our Group Chat'
-              description='Join the AEONIAN community on X for one-time social points.'
-              icon={<Twitter size={16} style={{ color: '#1D9BF0' }} />}
-              linkLabel='Join on X'
-              linkHref='https://x.com/i/chat/group_join/g2057103803988742289/2e12MZk4OZ'
-              claimed={socialClaims?.telegramJoinClaimed ?? false}
-              pending={pendingSocialClaims?.telegramJoinPending ?? false}
-              onClaim={claimTelegramJoin}
-              claiming={claimingTelegram}
-            />
-          </div>
-        </MobileCollapsibleSection>
-
-        {/* ── Promote AEONIAN — collapsible on mobile ───────────────────── */}
-        <MobileCollapsibleSection title='Promote AEONIAN' storageKey='aeonian:cardCollapsed:rewards:promoteAeonian'>
-          <PromoteAeonianCard
-            walletAddress={user?.address}
-            onGenerateCard={() => setPromoModalOpen(true)}
-            onSubmitLink={() => setSubmitModalOpen(true)}
-          />
-        </MobileCollapsibleSection>
-
-        {/* ── My Promotions — collapsible on mobile ─────────────────────── */}
-        {user && (
-          <MobileCollapsibleSection title='My Promotions' storageKey='aeonian:cardCollapsed:rewards:myPromotions'>
-            <MyPromotionsSection walletAddress={user.address} />
-          </MobileCollapsibleSection>
-        )}
-
-        {/* ── Recent Activity — collapsible on mobile ───────────────────── */}
-        {user && (
-          <MobileCollapsibleSection title='Recent Activity' storageKey='aeonian:cardCollapsed:rewards:recentActivity'>
-            <div className='glass-card rounded-xl px-3 py-0.5'>
-              {recentActivity.length === 0 ? (
-                <p className='py-4 text-center text-xs' style={{ color: '#8A8A8A' }}>
-                  No activity yet. Start trading to earn points!
-                </p>
+      {/* ── DESKTOP: three-zone layout ── */}
+      <div className='hidden lg:block'>
+        <div className='max-w-7xl mx-auto px-6 pt-5 pb-10'>
+          <div className='flex gap-6 items-start'>
+            {/* LEFT COLUMN: points hero + leaderboard */}
+            <div className='flex-shrink-0 space-y-4' style={{ width: '400px' }}>
+              {/* Your Points */}
+              {user ? (
+                <YourPointsCard
+                  points={userPoints ?? null}
+                  socialClaimsData={socialClaims ?? null}
+                  onHowItWorks={() => setHowModalOpen(true)}
+                />
               ) : (
-                recentActivity.map((item) => (
-                  <ActivityItem key={item.id} item={item} />
-                ))
+                <div className='glass-card rounded-xl p-4 text-center space-y-2'>
+                  <Trophy size={20} style={{ color: '#F59E0B', margin: '0 auto' }} />
+                  <p className='text-sm' style={{ color: '#8A8A8A' }}>Connect your wallet to see your points.</p>
+                </div>
+              )}
+
+              {/* Leaderboard — larger max-height on desktop */}
+              <div>
+                <h2 className='text-xs font-semibold uppercase tracking-wider mb-2' style={{ color: '#8A8A8A' }}>
+                  Leaderboard
+                </h2>
+                <div className='glass-card rounded-xl overflow-hidden'>
+                  {leaderboard.length === 0 ? (
+                    <p className='py-4 text-center text-xs' style={{ color: '#8A8A8A' }}>
+                      No data yet. Be the first on the leaderboard!
+                    </p>
+                  ) : (
+                    <div className='px-1.5 py-1.5 space-y-0 overflow-y-auto' style={{ maxHeight: '560px' }}>
+                      {leaderboard.map((entry, idx) => (
+                        <LeaderboardRow
+                          key={entry.id ?? entry.address}
+                          rank={idx + 1}
+                          entry={entry}
+                          isCurrentUser={!!user?.address && user.address === entry.address}
+                          isAdmin={isAdmin}
+                          onDelete={isAdmin ? handleDeleteUserRewardData : undefined}
+                          xProfile={xProfileMap.get(entry.address) ?? null}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* RIGHT COLUMN: social/promo + activity timeline */}
+            <div className='flex-1 min-w-0 space-y-5'>
+              {/* Social Rewards — always expanded on desktop */}
+              <div>
+                <h2 className='text-xs font-semibold uppercase tracking-wider mb-2' style={{ color: '#8A8A8A' }}>
+                  Social Rewards
+                </h2>
+                <div className='grid grid-cols-2 gap-3'>
+                  <SocialRewardCard
+                    title='Follow AEONIAN on X'
+                    description='Follow @Aeonian_Arena to earn one-time social points.'
+                    icon={<Twitter size={16} style={{ color: '#1D9BF0' }} />}
+                    linkLabel='Follow on X'
+                    linkHref='https://x.com/Aeonian_Arena'
+                    claimed={socialClaims?.twitterFollowClaimed ?? false}
+                    pending={pendingSocialClaims?.twitterFollowPending ?? false}
+                    onClaim={claimTwitterFollow}
+                    claiming={claimingTwitter}
+                  />
+                  <SocialRewardCard
+                    title='Join our Group Chat'
+                    description='Join the AEONIAN community on X for one-time social points.'
+                    icon={<Twitter size={16} style={{ color: '#1D9BF0' }} />}
+                    linkLabel='Join on X'
+                    linkHref='https://x.com/i/chat/group_join/g2057103803988742289/2e12MZk4OZ'
+                    claimed={socialClaims?.telegramJoinClaimed ?? false}
+                    pending={pendingSocialClaims?.telegramJoinPending ?? false}
+                    onClaim={claimTelegramJoin}
+                    claiming={claimingTelegram}
+                  />
+                </div>
+              </div>
+
+              {/* Promote AEONIAN — always expanded on desktop */}
+              <div>
+                <h2 className='text-xs font-semibold uppercase tracking-wider mb-2' style={{ color: '#8A8A8A' }}>
+                  Promote AEONIAN
+                </h2>
+                <PromoteAeonianCard
+                  walletAddress={user?.address}
+                  onGenerateCard={() => setPromoModalOpen(true)}
+                  onSubmitLink={() => setSubmitModalOpen(true)}
+                />
+              </div>
+
+              {/* My Promotions — always expanded on desktop */}
+              {user && (
+                <div>
+                  <h2 className='text-xs font-semibold uppercase tracking-wider mb-2' style={{ color: '#8A8A8A' }}>
+                    My Promotions
+                  </h2>
+                  <MyPromotionsSection walletAddress={user.address} />
+                </div>
+              )}
+
+              {/* Recent Activity — vertical timeline style on desktop */}
+              {user && (
+                <div>
+                  <h2 className='text-xs font-semibold uppercase tracking-wider mb-2' style={{ color: '#8A8A8A' }}>
+                    Recent Activity
+                  </h2>
+                  <div className='glass-card rounded-xl overflow-hidden'>
+                    {recentActivity.length === 0 ? (
+                      <p className='py-6 text-center text-xs' style={{ color: '#8A8A8A' }}>
+                        No activity yet. Start trading to earn points!
+                      </p>
+                    ) : (
+                      <div className='relative'>
+                        {/* Timeline spine */}
+                        <div
+                          className='absolute left-8 top-0 bottom-0 w-px'
+                          style={{ background: 'rgba(245,158,11,0.12)' }}
+                        />
+                        {recentActivity.map((item, idx) => (
+                          <div
+                            key={item.id}
+                            className='relative flex items-start gap-4 px-4 py-3'
+                            style={{
+                              borderBottom: idx < recentActivity.length - 1 ? '1px solid rgba(255,255,255,0.05)' : undefined,
+                            }}
+                          >
+                            {/* Timeline dot */}
+                            <div
+                              className='flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center z-10'
+                              style={{ background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.25)' }}
+                            >
+                              <Zap size={13} style={{ color: '#F59E0B' }} />
+                            </div>
+                            <div className='flex-1 min-w-0 pt-1'>
+                              <div className='flex items-center justify-between gap-2'>
+                                <span className='text-sm font-medium' style={{ color: '#E5E5E5' }}>
+                                  {activityTypeLabel(item.activityType)}
+                                </span>
+                                <span className='text-sm font-bold tabular-nums flex-shrink-0' style={{ color: '#F59E0B' }}>
+                                  +{item.points}
+                                </span>
+                              </div>
+                              {item.description && (
+                                <div className='text-xs mt-0.5 truncate' style={{ color: '#8A8A8A' }}>{item.description}</div>
+                              )}
+                              <div className='text-[10px] flex items-center gap-0.5 mt-1' style={{ color: '#555' }}>
+                                <Clock size={9} />
+                                {formatTime(item.createdAt)}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
               )}
             </div>
-          </MobileCollapsibleSection>
-        )}
+          </div>
+        </div>
+      </div>
 
+      {/* ── MOBILE: original single-column layout ── */}
+      <div className='lg:hidden'>
+        <div className='px-4 pt-2 space-y-2.5'>
+
+          {/* ── Your Points ────────────────────────────────────────────────── */}
+          {user ? (
+            <YourPointsCard
+              points={userPoints ?? null}
+              socialClaimsData={socialClaims ?? null}
+              onHowItWorks={() => setHowModalOpen(true)}
+            />
+          ) : (
+            <div className='glass-card rounded-xl p-3 text-center space-y-1.5'>
+              <Trophy size={18} style={{ color: '#F59E0B', margin: '0 auto' }} />
+              <p className='text-sm' style={{ color: '#8A8A8A' }}>Connect your wallet to see your points.</p>
+            </div>
+          )}
+
+          {/* ── Leaderboard ───────────────────────────────────────────────── */}
+          <div>
+            <h2 className='text-xs font-semibold uppercase tracking-wider mb-1.5' style={{ color: '#8A8A8A' }}>
+              Leaderboard
+            </h2>
+            <div className='glass-card rounded-xl overflow-hidden'>
+              {leaderboard.length === 0 ? (
+                <p className='py-4 text-center text-xs' style={{ color: '#8A8A8A' }}>
+                  No data yet. Be the first on the leaderboard!
+                </p>
+              ) : (
+                <div className='px-1.5 py-1.5 space-y-0 overflow-y-auto' style={{ maxHeight: '360px' }}>
+                  {leaderboard.map((entry, idx) => (
+                    <LeaderboardRow
+                      key={entry.id ?? entry.address}
+                      rank={idx + 1}
+                      entry={entry}
+                      isCurrentUser={!!user?.address && user.address === entry.address}
+                      isAdmin={isAdmin}
+                      onDelete={isAdmin ? handleDeleteUserRewardData : undefined}
+                      xProfile={xProfileMap.get(entry.address) ?? null}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ── Social Rewards — collapsible on mobile ────────────────────── */}
+          <MobileCollapsibleSection title='Social Rewards' storageKey='aeonian:cardCollapsed:rewards:socialRewards'>
+            <div className='grid grid-cols-1 md:grid-cols-2 gap-2'>
+              <SocialRewardCard
+                title='Follow AEONIAN on X'
+                description='Follow @Aeonian_Arena to earn one-time social points.'
+                icon={<Twitter size={16} style={{ color: '#1D9BF0' }} />}
+                linkLabel='Follow on X'
+                linkHref='https://x.com/Aeonian_Arena'
+                claimed={socialClaims?.twitterFollowClaimed ?? false}
+                pending={pendingSocialClaims?.twitterFollowPending ?? false}
+                onClaim={claimTwitterFollow}
+                claiming={claimingTwitter}
+              />
+              <SocialRewardCard
+                title='Join our Group Chat'
+                description='Join the AEONIAN community on X for one-time social points.'
+                icon={<Twitter size={16} style={{ color: '#1D9BF0' }} />}
+                linkLabel='Join on X'
+                linkHref='https://x.com/i/chat/group_join/g2057103803988742289/2e12MZk4OZ'
+                claimed={socialClaims?.telegramJoinClaimed ?? false}
+                pending={pendingSocialClaims?.telegramJoinPending ?? false}
+                onClaim={claimTelegramJoin}
+                claiming={claimingTelegram}
+              />
+            </div>
+          </MobileCollapsibleSection>
+
+          {/* ── Promote AEONIAN — collapsible on mobile ───────────────────── */}
+          <MobileCollapsibleSection title='Promote AEONIAN' storageKey='aeonian:cardCollapsed:rewards:promoteAeonian'>
+            <PromoteAeonianCard
+              walletAddress={user?.address}
+              onGenerateCard={() => setPromoModalOpen(true)}
+              onSubmitLink={() => setSubmitModalOpen(true)}
+            />
+          </MobileCollapsibleSection>
+
+          {/* ── My Promotions — collapsible on mobile ─────────────────────── */}
+          {user && (
+            <MobileCollapsibleSection title='My Promotions' storageKey='aeonian:cardCollapsed:rewards:myPromotions'>
+              <MyPromotionsSection walletAddress={user.address} />
+            </MobileCollapsibleSection>
+          )}
+
+          {/* ── Recent Activity — collapsible on mobile ───────────────────── */}
+          {user && (
+            <MobileCollapsibleSection title='Recent Activity' storageKey='aeonian:cardCollapsed:rewards:recentActivity'>
+              <div className='glass-card rounded-xl px-3 py-0.5'>
+                {recentActivity.length === 0 ? (
+                  <p className='py-4 text-center text-xs' style={{ color: '#8A8A8A' }}>
+                    No activity yet. Start trading to earn points!
+                  </p>
+                ) : (
+                  recentActivity.map((item) => (
+                    <ActivityItem key={item.id} item={item} />
+                  ))
+                )}
+              </div>
+            </MobileCollapsibleSection>
+          )}
+
+        </div>
       </div>
 
       <BottomTabNav />

@@ -308,8 +308,6 @@ export const WalletButton: React.FC<WalletButtonProps> = (_props) => {
                         left: `${popupPosition.left}px`,
                         width: '320px',
                         backgroundColor: styles.popup.backgroundColor,
-                        backdropFilter: 'blur(20px)',
-                        WebkitBackdropFilter: 'blur(20px)',
                         borderRadius: 'calc(var(--radius) * 2)',
                         boxShadow:
                           '0 8px 32px rgba(0, 0, 0, 0.25), 0 2px 8px rgba(0, 0, 0, 0.15)',

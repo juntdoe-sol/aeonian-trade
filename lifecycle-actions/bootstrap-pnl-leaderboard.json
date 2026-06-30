@@ -1,0 +1,615 @@
+{
+  "version": "1",
+  "kind": "bootstrap",
+  "scope": "seed-data",
+  "executionTarget": "server",
+  "description": "Seed realistic PnL leaderboard data for all four periods (daily, weekly, monthly, all) across 12 mock traders. entryId format is '{period}:{traderAddress}'. Written as PROJECT_VAULT_ADDRESS to satisfy the create rule.",
+  "targetEnvironments": ["mock"],
+  "bootstrapType": "seed-data",
+  "clearCollections": ["pnlLeaderboard"],
+  "actors": {
+    "vault": "FubCb8B3AxFyyWfcPdvb3MpkuteGzu77Y7dXd34sJyKZ"
+  },
+  "steps": [
+    { "op": "as", "who": "vault" },
+    {
+      "op": "setMany",
+      "writes": [
+        {
+          "path": "pnlLeaderboard/daily:FGZ8rRaoyCZRU5qpkmzqSmofpqegJW7wSzag6myUfjpy",
+          "data": {
+            "trader": "FGZ8rRaoyCZRU5qpkmzqSmofpqegJW7wSzag6myUfjpy",
+            "period": "daily",
+            "realizedPnlUsdCents": 87432,
+            "tradeCount": 12,
+            "rank": 1,
+            "pnlHidden": false,
+            "updatedAt": 1750540800
+          }
+        },
+        {
+          "path": "pnlLeaderboard/daily:8cridjwoVgnxhjxfPwTuMLdVv7vmjfTZYZH9KT3ZtE7o",
+          "data": {
+            "trader": "8cridjwoVgnxhjxfPwTuMLdVv7vmjfTZYZH9KT3ZtE7o",
+            "period": "daily",
+            "realizedPnlUsdCents": 54100,
+            "tradeCount": 9,
+            "rank": 2,
+            "pnlHidden": false,
+            "updatedAt": 1750540800
+          }
+        },
+        {
+          "path": "pnlLeaderboard/daily:FKNutYZKHSZYf7Zche3h4FEMqcqrJTY47dykjoPte1Ue",
+          "data": {
+            "trader": "FKNutYZKHSZYf7Zche3h4FEMqcqrJTY47dykjoPte1Ue",
+            "period": "daily",
+            "realizedPnlUsdCents": 38750,
+            "tradeCount": 7,
+            "rank": 3,
+            "pnlHidden": false,
+            "updatedAt": 1750540800
+          }
+        },
+        {
+          "path": "pnlLeaderboard/daily:87E6QcTnstXh37fB1vY2NfrXX912PrHnZbs8u3z838sc",
+          "data": {
+            "trader": "87E6QcTnstXh37fB1vY2NfrXX912PrHnZbs8u3z838sc",
+            "period": "daily",
+            "realizedPnlUsdCents": 22300,
+            "tradeCount": 5,
+            "rank": 4,
+            "pnlHidden": false,
+            "updatedAt": 1750540800
+          }
+        },
+        {
+          "path": "pnlLeaderboard/daily:Dwr5W836aa4cwDcrYeWWbcudQvbKARikYSzWxaNDkCAP",
+          "data": {
+            "trader": "Dwr5W836aa4cwDcrYeWWbcudQvbKARikYSzWxaNDkCAP",
+            "period": "daily",
+            "realizedPnlUsdCents": 15890,
+            "tradeCount": 8,
+            "rank": 5,
+            "pnlHidden": false,
+            "updatedAt": 1750540800
+          }
+        },
+        {
+          "path": "pnlLeaderboard/daily:3CgFdizq7JvLSBTiVnU8n2mDg65hBSMRpZ7wn1adUY5d",
+          "data": {
+            "trader": "3CgFdizq7JvLSBTiVnU8n2mDg65hBSMRpZ7wn1adUY5d",
+            "period": "daily",
+            "realizedPnlUsdCents": 9420,
+            "tradeCount": 4,
+            "rank": 6,
+            "pnlHidden": false,
+            "updatedAt": 1750540800
+          }
+        },
+        {
+          "path": "pnlLeaderboard/daily:EdW8awxG1uFPeetic8oSMiuXRx1Pcw2VPtft9xoBZPyL",
+          "data": {
+            "trader": "EdW8awxG1uFPeetic8oSMiuXRx1Pcw2VPtft9xoBZPyL",
+            "period": "daily",
+            "realizedPnlUsdCents": 5670,
+            "tradeCount": 3,
+            "rank": 7,
+            "pnlHidden": false,
+            "updatedAt": 1750540800
+          }
+        },
+        {
+          "path": "pnlLeaderboard/daily:CaFa5FuZzyt5x4FXqopDrdswMNgGLK8hfdVDXUSFnKUC",
+          "data": {
+            "trader": "CaFa5FuZzyt5x4FXqopDrdswMNgGLK8hfdVDXUSFnKUC",
+            "period": "daily",
+            "realizedPnlUsdCents": 2310,
+            "tradeCount": 6,
+            "rank": 8,
+            "pnlHidden": false,
+            "updatedAt": 1750540800
+          }
+        },
+        {
+          "path": "pnlLeaderboard/daily:7aGHExDTZm6yqzbNyhZDz3tcYhU3M9UWmuQfDxpQaogE",
+          "data": {
+            "trader": "7aGHExDTZm6yqzbNyhZDz3tcYhU3M9UWmuQfDxpQaogE",
+            "period": "daily",
+            "realizedPnlUsdCents": 880,
+            "tradeCount": 2,
+            "rank": 9,
+            "pnlHidden": false,
+            "updatedAt": 1750540800
+          }
+        },
+        {
+          "path": "pnlLeaderboard/daily:3P7TSnRujCXQwJ4ki5FRX2CuyVznVMoctZqqK62Rnzgq",
+          "data": {
+            "trader": "3P7TSnRujCXQwJ4ki5FRX2CuyVznVMoctZqqK62Rnzgq",
+            "period": "daily",
+            "realizedPnlUsdCents": -1250,
+            "tradeCount": 3,
+            "rank": 10,
+            "pnlHidden": false,
+            "updatedAt": 1750540800
+          }
+        },
+        {
+          "path": "pnlLeaderboard/daily:2DgjZuT9AU1uMHD8jYakosDe9GncFmJS4emKGhSuqnik",
+          "data": {
+            "trader": "2DgjZuT9AU1uMHD8jYakosDe9GncFmJS4emKGhSuqnik",
+            "period": "daily",
+            "realizedPnlUsdCents": -4780,
+            "tradeCount": 5,
+            "rank": 11,
+            "pnlHidden": false,
+            "updatedAt": 1750540800
+          }
+        },
+        {
+          "path": "pnlLeaderboard/daily:44QAdu3vcqassDmPG5gDXS52hCLXH5yMEA3C7JiuCzfd",
+          "data": {
+            "trader": "44QAdu3vcqassDmPG5gDXS52hCLXH5yMEA3C7JiuCzfd",
+            "period": "daily",
+            "realizedPnlUsdCents": -11200,
+            "tradeCount": 8,
+            "rank": 12,
+            "pnlHidden": false,
+            "updatedAt": 1750540800
+          }
+        }
+      ]
+    },
+    { "op": "as", "who": "vault" },
+    {
+      "op": "setMany",
+      "writes": [
+        {
+          "path": "pnlLeaderboard/weekly:3CgFdizq7JvLSBTiVnU8n2mDg65hBSMRpZ7wn1adUY5d",
+          "data": {
+            "trader": "3CgFdizq7JvLSBTiVnU8n2mDg65hBSMRpZ7wn1adUY5d",
+            "period": "weekly",
+            "realizedPnlUsdCents": 389500,
+            "tradeCount": 47,
+            "rank": 1,
+            "pnlHidden": false,
+            "updatedAt": 1750540800
+          }
+        },
+        {
+          "path": "pnlLeaderboard/weekly:FGZ8rRaoyCZRU5qpkmzqSmofpqegJW7wSzag6myUfjpy",
+          "data": {
+            "trader": "FGZ8rRaoyCZRU5qpkmzqSmofpqegJW7wSzag6myUfjpy",
+            "period": "weekly",
+            "realizedPnlUsdCents": 271340,
+            "tradeCount": 58,
+            "rank": 2,
+            "pnlHidden": false,
+            "updatedAt": 1750540800
+          }
+        },
+        {
+          "path": "pnlLeaderboard/weekly:Dwr5W836aa4cwDcrYeWWbcudQvbKARikYSzWxaNDkCAP",
+          "data": {
+            "trader": "Dwr5W836aa4cwDcrYeWWbcudQvbKARikYSzWxaNDkCAP",
+            "period": "weekly",
+            "realizedPnlUsdCents": 198200,
+            "tradeCount": 39,
+            "rank": 3,
+            "pnlHidden": false,
+            "updatedAt": 1750540800
+          }
+        },
+        {
+          "path": "pnlLeaderboard/weekly:44QAdu3vcqassDmPG5gDXS52hCLXH5yMEA3C7JiuCzfd",
+          "data": {
+            "trader": "44QAdu3vcqassDmPG5gDXS52hCLXH5yMEA3C7JiuCzfd",
+            "period": "weekly",
+            "realizedPnlUsdCents": 143600,
+            "tradeCount": 33,
+            "rank": 4,
+            "pnlHidden": false,
+            "updatedAt": 1750540800
+          }
+        },
+        {
+          "path": "pnlLeaderboard/weekly:87E6QcTnstXh37fB1vY2NfrXX912PrHnZbs8u3z838sc",
+          "data": {
+            "trader": "87E6QcTnstXh37fB1vY2NfrXX912PrHnZbs8u3z838sc",
+            "period": "weekly",
+            "realizedPnlUsdCents": 97450,
+            "tradeCount": 22,
+            "rank": 5,
+            "pnlHidden": false,
+            "updatedAt": 1750540800
+          }
+        },
+        {
+          "path": "pnlLeaderboard/weekly:CaFa5FuZzyt5x4FXqopDrdswMNgGLK8hfdVDXUSFnKUC",
+          "data": {
+            "trader": "CaFa5FuZzyt5x4FXqopDrdswMNgGLK8hfdVDXUSFnKUC",
+            "period": "weekly",
+            "realizedPnlUsdCents": 62800,
+            "tradeCount": 18,
+            "rank": 6,
+            "pnlHidden": false,
+            "updatedAt": 1750540800
+          }
+        },
+        {
+          "path": "pnlLeaderboard/weekly:8cridjwoVgnxhjxfPwTuMLdVv7vmjfTZYZH9KT3ZtE7o",
+          "data": {
+            "trader": "8cridjwoVgnxhjxfPwTuMLdVv7vmjfTZYZH9KT3ZtE7o",
+            "period": "weekly",
+            "realizedPnlUsdCents": 41200,
+            "tradeCount": 31,
+            "rank": 7,
+            "pnlHidden": false,
+            "updatedAt": 1750540800
+          }
+        },
+        {
+          "path": "pnlLeaderboard/weekly:7aGHExDTZm6yqzbNyhZDz3tcYhU3M9UWmuQfDxpQaogE",
+          "data": {
+            "trader": "7aGHExDTZm6yqzbNyhZDz3tcYhU3M9UWmuQfDxpQaogE",
+            "period": "weekly",
+            "realizedPnlUsdCents": 18900,
+            "tradeCount": 14,
+            "rank": 8,
+            "pnlHidden": false,
+            "updatedAt": 1750540800
+          }
+        },
+        {
+          "path": "pnlLeaderboard/weekly:FKNutYZKHSZYf7Zche3h4FEMqcqrJTY47dykjoPte1Ue",
+          "data": {
+            "trader": "FKNutYZKHSZYf7Zche3h4FEMqcqrJTY47dykjoPte1Ue",
+            "period": "weekly",
+            "realizedPnlUsdCents": 7650,
+            "tradeCount": 9,
+            "rank": 9,
+            "pnlHidden": false,
+            "updatedAt": 1750540800
+          }
+        },
+        {
+          "path": "pnlLeaderboard/weekly:EdW8awxG1uFPeetic8oSMiuXRx1Pcw2VPtft9xoBZPyL",
+          "data": {
+            "trader": "EdW8awxG1uFPeetic8oSMiuXRx1Pcw2VPtft9xoBZPyL",
+            "period": "weekly",
+            "realizedPnlUsdCents": -3400,
+            "tradeCount": 11,
+            "rank": 10,
+            "pnlHidden": false,
+            "updatedAt": 1750540800
+          }
+        },
+        {
+          "path": "pnlLeaderboard/weekly:3P7TSnRujCXQwJ4ki5FRX2CuyVznVMoctZqqK62Rnzgq",
+          "data": {
+            "trader": "3P7TSnRujCXQwJ4ki5FRX2CuyVznVMoctZqqK62Rnzgq",
+            "period": "weekly",
+            "realizedPnlUsdCents": -18700,
+            "tradeCount": 16,
+            "rank": 11,
+            "pnlHidden": false,
+            "updatedAt": 1750540800
+          }
+        },
+        {
+          "path": "pnlLeaderboard/weekly:2DgjZuT9AU1uMHD8jYakosDe9GncFmJS4emKGhSuqnik",
+          "data": {
+            "trader": "2DgjZuT9AU1uMHD8jYakosDe9GncFmJS4emKGhSuqnik",
+            "period": "weekly",
+            "realizedPnlUsdCents": -37500,
+            "tradeCount": 24,
+            "rank": 12,
+            "pnlHidden": false,
+            "updatedAt": 1750540800
+          }
+        }
+      ]
+    },
+    { "op": "as", "who": "vault" },
+    {
+      "op": "setMany",
+      "writes": [
+        {
+          "path": "pnlLeaderboard/monthly:7aGHExDTZm6yqzbNyhZDz3tcYhU3M9UWmuQfDxpQaogE",
+          "data": {
+            "trader": "7aGHExDTZm6yqzbNyhZDz3tcYhU3M9UWmuQfDxpQaogE",
+            "period": "monthly",
+            "realizedPnlUsdCents": 1187400,
+            "tradeCount": 178,
+            "rank": 1,
+            "pnlHidden": false,
+            "updatedAt": 1750540800
+          }
+        },
+        {
+          "path": "pnlLeaderboard/monthly:FGZ8rRaoyCZRU5qpkmzqSmofpqegJW7wSzag6myUfjpy",
+          "data": {
+            "trader": "FGZ8rRaoyCZRU5qpkmzqSmofpqegJW7wSzag6myUfjpy",
+            "period": "monthly",
+            "realizedPnlUsdCents": 893200,
+            "tradeCount": 154,
+            "rank": 2,
+            "pnlHidden": false,
+            "updatedAt": 1750540800
+          }
+        },
+        {
+          "path": "pnlLeaderboard/monthly:3CgFdizq7JvLSBTiVnU8n2mDg65hBSMRpZ7wn1adUY5d",
+          "data": {
+            "trader": "3CgFdizq7JvLSBTiVnU8n2mDg65hBSMRpZ7wn1adUY5d",
+            "period": "monthly",
+            "realizedPnlUsdCents": 641500,
+            "tradeCount": 132,
+            "rank": 3,
+            "pnlHidden": false,
+            "updatedAt": 1750540800
+          }
+        },
+        {
+          "path": "pnlLeaderboard/monthly:44QAdu3vcqassDmPG5gDXS52hCLXH5yMEA3C7JiuCzfd",
+          "data": {
+            "trader": "44QAdu3vcqassDmPG5gDXS52hCLXH5yMEA3C7JiuCzfd",
+            "period": "monthly",
+            "realizedPnlUsdCents": 452300,
+            "tradeCount": 99,
+            "rank": 4,
+            "pnlHidden": false,
+            "updatedAt": 1750540800
+          }
+        },
+        {
+          "path": "pnlLeaderboard/monthly:FKNutYZKHSZYf7Zche3h4FEMqcqrJTY47dykjoPte1Ue",
+          "data": {
+            "trader": "FKNutYZKHSZYf7Zche3h4FEMqcqrJTY47dykjoPte1Ue",
+            "period": "monthly",
+            "realizedPnlUsdCents": 318700,
+            "tradeCount": 86,
+            "rank": 5,
+            "pnlHidden": false,
+            "updatedAt": 1750540800
+          }
+        },
+        {
+          "path": "pnlLeaderboard/monthly:8cridjwoVgnxhjxfPwTuMLdVv7vmjfTZYZH9KT3ZtE7o",
+          "data": {
+            "trader": "8cridjwoVgnxhjxfPwTuMLdVv7vmjfTZYZH9KT3ZtE7o",
+            "period": "monthly",
+            "realizedPnlUsdCents": 219600,
+            "tradeCount": 74,
+            "rank": 6,
+            "pnlHidden": false,
+            "updatedAt": 1750540800
+          }
+        },
+        {
+          "path": "pnlLeaderboard/monthly:Dwr5W836aa4cwDcrYeWWbcudQvbKARikYSzWxaNDkCAP",
+          "data": {
+            "trader": "Dwr5W836aa4cwDcrYeWWbcudQvbKARikYSzWxaNDkCAP",
+            "period": "monthly",
+            "realizedPnlUsdCents": 147800,
+            "tradeCount": 63,
+            "rank": 7,
+            "pnlHidden": false,
+            "updatedAt": 1750540800
+          }
+        },
+        {
+          "path": "pnlLeaderboard/monthly:CaFa5FuZzyt5x4FXqopDrdswMNgGLK8hfdVDXUSFnKUC",
+          "data": {
+            "trader": "CaFa5FuZzyt5x4FXqopDrdswMNgGLK8hfdVDXUSFnKUC",
+            "period": "monthly",
+            "realizedPnlUsdCents": 89400,
+            "tradeCount": 51,
+            "rank": 8,
+            "pnlHidden": false,
+            "updatedAt": 1750540800
+          }
+        },
+        {
+          "path": "pnlLeaderboard/monthly:EdW8awxG1uFPeetic8oSMiuXRx1Pcw2VPtft9xoBZPyL",
+          "data": {
+            "trader": "EdW8awxG1uFPeetic8oSMiuXRx1Pcw2VPtft9xoBZPyL",
+            "period": "monthly",
+            "realizedPnlUsdCents": 44200,
+            "tradeCount": 38,
+            "rank": 9,
+            "pnlHidden": false,
+            "updatedAt": 1750540800
+          }
+        },
+        {
+          "path": "pnlLeaderboard/monthly:87E6QcTnstXh37fB1vY2NfrXX912PrHnZbs8u3z838sc",
+          "data": {
+            "trader": "87E6QcTnstXh37fB1vY2NfrXX912PrHnZbs8u3z838sc",
+            "period": "monthly",
+            "realizedPnlUsdCents": 17300,
+            "tradeCount": 27,
+            "rank": 10,
+            "pnlHidden": false,
+            "updatedAt": 1750540800
+          }
+        },
+        {
+          "path": "pnlLeaderboard/monthly:3P7TSnRujCXQwJ4ki5FRX2CuyVznVMoctZqqK62Rnzgq",
+          "data": {
+            "trader": "3P7TSnRujCXQwJ4ki5FRX2CuyVznVMoctZqqK62Rnzgq",
+            "period": "monthly",
+            "realizedPnlUsdCents": 4900,
+            "tradeCount": 20,
+            "rank": 11,
+            "pnlHidden": false,
+            "updatedAt": 1750540800
+          }
+        },
+        {
+          "path": "pnlLeaderboard/monthly:2DgjZuT9AU1uMHD8jYakosDe9GncFmJS4emKGhSuqnik",
+          "data": {
+            "trader": "2DgjZuT9AU1uMHD8jYakosDe9GncFmJS4emKGhSuqnik",
+            "period": "monthly",
+            "realizedPnlUsdCents": -28600,
+            "tradeCount": 43,
+            "rank": 12,
+            "pnlHidden": false,
+            "updatedAt": 1750540800
+          }
+        }
+      ]
+    },
+    { "op": "as", "who": "vault" },
+    {
+      "op": "setMany",
+      "writes": [
+        {
+          "path": "pnlLeaderboard/all:FGZ8rRaoyCZRU5qpkmzqSmofpqegJW7wSzag6myUfjpy",
+          "data": {
+            "trader": "FGZ8rRaoyCZRU5qpkmzqSmofpqegJW7wSzag6myUfjpy",
+            "period": "all",
+            "realizedPnlUsdCents": 3847200,
+            "tradeCount": 521,
+            "rank": 1,
+            "pnlHidden": false,
+            "updatedAt": 1750540800
+          }
+        },
+        {
+          "path": "pnlLeaderboard/all:7aGHExDTZm6yqzbNyhZDz3tcYhU3M9UWmuQfDxpQaogE",
+          "data": {
+            "trader": "7aGHExDTZm6yqzbNyhZDz3tcYhU3M9UWmuQfDxpQaogE",
+            "period": "all",
+            "realizedPnlUsdCents": 2916500,
+            "tradeCount": 487,
+            "rank": 2,
+            "pnlHidden": false,
+            "updatedAt": 1750540800
+          }
+        },
+        {
+          "path": "pnlLeaderboard/all:3CgFdizq7JvLSBTiVnU8n2mDg65hBSMRpZ7wn1adUY5d",
+          "data": {
+            "trader": "3CgFdizq7JvLSBTiVnU8n2mDg65hBSMRpZ7wn1adUY5d",
+            "period": "all",
+            "realizedPnlUsdCents": 2103400,
+            "tradeCount": 412,
+            "rank": 3,
+            "pnlHidden": false,
+            "updatedAt": 1750540800
+          }
+        },
+        {
+          "path": "pnlLeaderboard/all:44QAdu3vcqassDmPG5gDXS52hCLXH5yMEA3C7JiuCzfd",
+          "data": {
+            "trader": "44QAdu3vcqassDmPG5gDXS52hCLXH5yMEA3C7JiuCzfd",
+            "period": "all",
+            "realizedPnlUsdCents": 1578900,
+            "tradeCount": 378,
+            "rank": 4,
+            "pnlHidden": false,
+            "updatedAt": 1750540800
+          }
+        },
+        {
+          "path": "pnlLeaderboard/all:Dwr5W836aa4cwDcrYeWWbcudQvbKARikYSzWxaNDkCAP",
+          "data": {
+            "trader": "Dwr5W836aa4cwDcrYeWWbcudQvbKARikYSzWxaNDkCAP",
+            "period": "all",
+            "realizedPnlUsdCents": 1134200,
+            "tradeCount": 334,
+            "rank": 5,
+            "pnlHidden": false,
+            "updatedAt": 1750540800
+          }
+        },
+        {
+          "path": "pnlLeaderboard/all:FKNutYZKHSZYf7Zche3h4FEMqcqrJTY47dykjoPte1Ue",
+          "data": {
+            "trader": "FKNutYZKHSZYf7Zche3h4FEMqcqrJTY47dykjoPte1Ue",
+            "period": "all",
+            "realizedPnlUsdCents": 786300,
+            "tradeCount": 289,
+            "rank": 6,
+            "pnlHidden": false,
+            "updatedAt": 1750540800
+          }
+        },
+        {
+          "path": "pnlLeaderboard/all:8cridjwoVgnxhjxfPwTuMLdVv7vmjfTZYZH9KT3ZtE7o",
+          "data": {
+            "trader": "8cridjwoVgnxhjxfPwTuMLdVv7vmjfTZYZH9KT3ZtE7o",
+            "period": "all",
+            "realizedPnlUsdCents": 524700,
+            "tradeCount": 243,
+            "rank": 7,
+            "pnlHidden": false,
+            "updatedAt": 1750540800
+          }
+        },
+        {
+          "path": "pnlLeaderboard/all:87E6QcTnstXh37fB1vY2NfrXX912PrHnZbs8u3z838sc",
+          "data": {
+            "trader": "87E6QcTnstXh37fB1vY2NfrXX912PrHnZbs8u3z838sc",
+            "period": "all",
+            "realizedPnlUsdCents": 318600,
+            "tradeCount": 198,
+            "rank": 8,
+            "pnlHidden": false,
+            "updatedAt": 1750540800
+          }
+        },
+        {
+          "path": "pnlLeaderboard/all:CaFa5FuZzyt5x4FXqopDrdswMNgGLK8hfdVDXUSFnKUC",
+          "data": {
+            "trader": "CaFa5FuZzyt5x4FXqopDrdswMNgGLK8hfdVDXUSFnKUC",
+            "period": "all",
+            "realizedPnlUsdCents": 163400,
+            "tradeCount": 157,
+            "rank": 9,
+            "pnlHidden": false,
+            "updatedAt": 1750540800
+          }
+        },
+        {
+          "path": "pnlLeaderboard/all:EdW8awxG1uFPeetic8oSMiuXRx1Pcw2VPtft9xoBZPyL",
+          "data": {
+            "trader": "EdW8awxG1uFPeetic8oSMiuXRx1Pcw2VPtft9xoBZPyL",
+            "period": "all",
+            "realizedPnlUsdCents": 84500,
+            "tradeCount": 122,
+            "rank": 10,
+            "pnlHidden": false,
+            "updatedAt": 1750540800
+          }
+        },
+        {
+          "path": "pnlLeaderboard/all:3P7TSnRujCXQwJ4ki5FRX2CuyVznVMoctZqqK62Rnzgq",
+          "data": {
+            "trader": "3P7TSnRujCXQwJ4ki5FRX2CuyVznVMoctZqqK62Rnzgq",
+            "period": "all",
+            "realizedPnlUsdCents": 29800,
+            "tradeCount": 89,
+            "rank": 11,
+            "pnlHidden": false,
+            "updatedAt": 1750540800
+          }
+        },
+        {
+          "path": "pnlLeaderboard/all:2DgjZuT9AU1uMHD8jYakosDe9GncFmJS4emKGhSuqnik",
+          "data": {
+            "trader": "2DgjZuT9AU1uMHD8jYakosDe9GncFmJS4emKGhSuqnik",
+            "period": "all",
+            "realizedPnlUsdCents": -52300,
+            "tradeCount": 74,
+            "rank": 12,
+            "pnlHidden": false,
+            "updatedAt": 1750540800
+          }
+        }
+      ]
+    }
+  ]
+}

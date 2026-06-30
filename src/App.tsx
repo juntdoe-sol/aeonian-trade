@@ -1,11 +1,15 @@
 import { Toaster } from '@/components/ui/sonner';
 import { ThemeProvider } from '@/hooks/use-theme';
 import { JSX, lazy, Suspense, useEffect } from 'react';
+import { CelebrationOverlay } from '@/components/CelebrationOverlay';
+import { RocketLaunchOverlay } from '@/components/RocketLaunchOverlay';
+import { DesktopFooter } from '@/components/DesktopFooter';
 import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
-import { DesktopBlock } from '@/components/DesktopBlock';
 import { OAuthProvider } from '@/contexts/OAuthContext';
 import { useMobile } from '@/hooks/use-mobile';
 import { disableZoom } from '@/utils/disable-zoom';
+import { playClick } from '@/utils/sound';
+import { hapticTap } from '@/utils/haptics';
 
 function ScrollToTop(): null {
   const { pathname } = useLocation();
@@ -20,6 +24,7 @@ function ScrollToTop(): null {
 }
 
 const TradePage = lazy(() => import('@/components/TradePage'));
+const DiscoveryPage = lazy(() => import('@/components/DiscoveryPage'));
 const PortfolioPage = lazy(() => import('@/components/PortfolioPage'));
 const LicensePage = lazy(() => import('@/components/LicensePage'));
 const CopyrightPage = lazy(() => import('@/components/CopyrightPage'));
@@ -53,10 +58,26 @@ function App(): JSX.Element {
   useEffect(() => {
     disableZoom();
   }, []);
+
+  // Global delegated click sound — fires playClick() whenever the user clicks any
+  // interactive control (button, role=button, or <a>). Attached once with capture so
+  // it fires before stopPropagation can swallow it. Gain is low enough that rapid
+  // clicks don't stack unpleasantly.
+  useEffect(() => {
+    function handleGlobalClick(e: MouseEvent) {
+      const target = e.target as Element | null;
+      if (!target) return;
+      if (target.closest('button, [role="button"], a')) {
+        playClick();
+        hapticTap();
+      }
+    }
+    document.addEventListener('click', handleGlobalClick, { capture: true });
+    return () => document.removeEventListener('click', handleGlobalClick, { capture: true });
+  }, []);
   return (
     <ThemeProvider>
       <OAuthProvider>
-      <DesktopBlock>
         <div
           id='app-container'
           className='relative h-[100dvh] overflow-hidden flex flex-col bg-background'
@@ -67,7 +88,8 @@ function App(): JSX.Element {
           <main id='app-main' className='flex-1 relative z-10'>
             <Suspense fallback={null}>
               <Routes>
-                <Route path='/' element={<Navigate to='/trade/SOL-PERP' replace />} />
+                <Route path='/' element={<Navigate to='/discovery' replace />} />
+                <Route path='/discovery' element={<DiscoveryPage />} />
                 <Route path='/trade' element={<Navigate to='/trade/SOL-PERP' replace />} />
                 <Route path='/trade/:symbol' element={<TradePageCanonical />} />
                 <Route path='/portfolio' element={<PortfolioPage />} />
@@ -86,9 +108,11 @@ function App(): JSX.Element {
             </Suspense>
           </main>
 
+          <DesktopFooter />
           <Toaster position={isMobile ? 'top-center' : 'bottom-right'} />
+          <CelebrationOverlay />
+          <RocketLaunchOverlay />
         </div>
-      </DesktopBlock>
       </OAuthProvider>
     </ThemeProvider>
   );

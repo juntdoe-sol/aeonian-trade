@@ -1,19 +1,22 @@
 /**
- * ActiveAccountFlow — Phoenix Exchange exact 4-step onboarding modal.
+ * ActiveAccountFlow — Phoenix Exchange 3-step onboarding modal.
  *
  * Steps:
- *   verifyAccess  → single code input "Enter your code" / "Access Phoenix"
  *   signIn        → wallet message signature
  *   setupAccount  → on-chain trader registration (phoenixRegisterTrader)
  *   finishSignIn  → success/completion state
  *
+ * No invite code is required: signup goes straight from wallet sign-in to
+ * on-chain registration via @PhoenixPerpsPlugin.registerTrader (phoenixTrader
+ * policy collection), which does not need any activation code.
+ *
  * Initial silent check: if trader already exists, skip to success and close.
  */
 
-import { api, createAuthenticatedApiClient } from '@/lib/api-client';
+import { api } from '@/lib/api-client';
 import { getPhoenixTrader } from '@/lib/collections/phoenixTrader';
 import { phoenixRegisterTrader, type RegisterPhase } from '@/utils/phoenix-client';
-import { getIdToken, useAuth } from '@pooflabs/web';
+import { useAuth } from '@pooflabs/web';
 import {
   CheckCircle2,
   Loader2,
@@ -30,11 +33,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
-type Step = 'verifyAccess' | 'signIn' | 'setupAccount' | 'finishSignIn';
+type Step = 'signIn' | 'setupAccount' | 'finishSignIn';
 
 interface ActiveAccountFlowProps {
   open: boolean;
@@ -43,10 +45,9 @@ interface ActiveAccountFlowProps {
 
 // ─── Progress Bar ──────────────────────────────────────────────────────────────
 
-const STEP_ORDER: Step[] = ['verifyAccess', 'signIn', 'setupAccount', 'finishSignIn'];
+const STEP_ORDER: Step[] = ['signIn', 'setupAccount', 'finishSignIn'];
 
 const STEP_LABELS: Record<Step, string> = {
-  verifyAccess: 'Verify access',
   signIn: 'Sign in',
   setupAccount: 'Set up account',
   finishSignIn: 'Finish sign-in',
@@ -118,10 +119,12 @@ export function ActiveAccountFlow({ open, onOpenChange }: ActiveAccountFlowProps
   const { user, login } = useAuth();
   const navigate = useNavigate();
 
-  const [step, setStep] = useState<Step>('verifyAccess');
-  const [code, setCode] = useState('');
-  const [codeError, setCodeError] = useState('');
-  const [submittingCode, setSubmittingCode] = useState(false);
+  const [step, setStep] = useState<Step>('signIn');
+
+  // While true, the initial "already registered?" check is in flight for an
+  // already-connected wallet — hold off auto-triggering sign-in so we don't
+  // pop a redundant wallet prompt for a wallet that's already set up.
+  const [checking, setChecking] = useState(false);
 
   const [signError, setSignError] = useState('');
   const [signing, setSigning] = useState(false);
@@ -138,10 +141,8 @@ export function ActiveAccountFlow({ open, onOpenChange }: ActiveAccountFlowProps
   useEffect(() => {
     if (!open) {
       const t = setTimeout(() => {
-        setStep('verifyAccess');
-        setCode('');
-        setCodeError('');
-        setSubmittingCode(false);
+        setStep('signIn');
+        setChecking(false);
         setSignError('');
         setSigning(false);
         setRegisterError('');
@@ -162,6 +163,7 @@ export function ActiveAccountFlow({ open, onOpenChange }: ActiveAccountFlowProps
     initialCheckDoneRef.current = true;
 
     let cancelled = false;
+    setChecking(true);
     async function checkTrader() {
       try {
         // Use the backend Phoenix API as source of truth — same pattern as PortfolioPage and AccountPage.
@@ -181,12 +183,12 @@ export function ActiveAccountFlow({ open, onOpenChange }: ActiveAccountFlowProps
           if (tarobaseDoc) {
             // Both Phoenix and Tarobase confirm registration — close immediately.
             onOpenChange(false);
-            toast.success('Your Phoenix account is already active.');
+            toast.success('Your trading account is already active.');
           } else {
             // Phoenix-registered but Tarobase doc is missing (common for social-login wallets
             // that used a prior session or registered on phoenix.trade directly).
             // Skip the invite code step and go straight to signIn to create the Tarobase doc.
-            toast.info('Linking your existing Phoenix account…');
+            toast.info('Linking your existing trading account…');
             setStep('signIn');
           }
         }
@@ -199,6 +201,8 @@ export function ActiveAccountFlow({ open, onOpenChange }: ActiveAccountFlowProps
         if (!msg.includes('404') && !msg.toLowerCase().includes('not found') && !msg.toLowerCase().includes('trader not found')) {
           // Non-404 error: fall through silently (don't block onboarding on API errors)
         }
+      } finally {
+        if (!cancelled) setChecking(false);
       }
     }
     checkTrader();
@@ -206,7 +210,12 @@ export function ActiveAccountFlow({ open, onOpenChange }: ActiveAccountFlowProps
   }, [open, user?.address, onOpenChange]);
 
   // ── Auto-trigger: sign in step ────────────────────────────────────────────
+  // Only fire once the dialog is open. handleSign() calls login() which works
+  // whether or not the wallet is already connected, so there is no code step to
+  // gate on — signup goes straight from wallet sign-in to on-chain setup.
   useEffect(() => {
+    if (!open) return;
+    if (checking) return; // wait for the "already registered?" check to finish
     if (step !== 'signIn') {
       signTriggeredRef.current = false;
       return;
@@ -215,7 +224,7 @@ export function ActiveAccountFlow({ open, onOpenChange }: ActiveAccountFlowProps
     signTriggeredRef.current = true;
     handleSign();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step]);
+  }, [step, open, checking]);
 
   // ── Auto-trigger: setup account step ─────────────────────────────────────
   useEffect(() => {
@@ -241,45 +250,15 @@ export function ActiveAccountFlow({ open, onOpenChange }: ActiveAccountFlowProps
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
-  async function handleCodeSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!user?.address) {
-      await login();
-      return;
-    }
-    const trimmed = code.trim();
-    if (!trimmed) {
-      setCodeError('Please enter your code.');
-      return;
-    }
-    setCodeError('');
-    setSubmittingCode(true);
-
-    try {
-      const token = await getIdToken();
-      if (!token) throw new Error('Could not retrieve auth token. Please reconnect your wallet.');
-      const authApi = createAuthenticatedApiClient(token, user.address);
-      await authApi.post('/api/phoenix/invite/activate-code', {
-        authority: user.address,
-        code: trimmed,
-      });
-      setStep('signIn');
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Invalid code. Please try again.';
-      setCodeError(msg);
-    } finally {
-      setSubmittingCode(false);
-    }
-  }
-
   async function handleSign() {
-    if (!user?.address) return;
     setSigning(true);
     setSignError('');
     try {
-      // login() establishes the Poof auth session (wallet signature under the hood).
-      // This is required before the setupAccount step can call set() on the SDK,
-      // because the policy rule checks @user.address which is derived from the session token.
+      // login() connects the wallet (if needed) and establishes the Poof auth
+      // session (wallet signature under the hood). This is required before the
+      // setupAccount step can call set() on the SDK, because the policy rule
+      // checks @user.address which is derived from the session token. It is safe
+      // to call even when already connected.
       await login();
       setStep('setupAccount');
     } catch (err: unknown) {
@@ -329,87 +308,6 @@ export function ActiveAccountFlow({ open, onOpenChange }: ActiveAccountFlowProps
   }
 
   // ── Step renderers ─────────────────────────────────────────────────────────
-
-  function renderVerifyAccess() {
-    const isLoggedIn = !!user;
-
-    return (
-      <div className='space-y-5'>
-        <div>
-          <h2 className='text-lg font-bold mb-1' style={{ color: '#FFF' }}>
-            Verify access
-          </h2>
-          <p className='text-sm' style={{ color: '#666' }}>
-            Enter your invite code to access Phoenix Exchange.
-          </p>
-        </div>
-
-        {!isLoggedIn ? (
-          <div className='space-y-3'>
-            <p className='text-xs' style={{ color: '#888' }}>
-              Log in first to continue.
-            </p>
-            <Button
-              onClick={login}
-              className='w-full font-bold py-3 text-sm rounded-xl'
-              style={{ background: '#b794f6', color: '#fff', border: 'none' }}
-            >
-              Log In
-            </Button>
-          </div>
-        ) : (
-          <form onSubmit={handleCodeSubmit} className='space-y-3'>
-            <Input
-              placeholder='Enter your code'
-              value={code}
-              onChange={(e) => { setCode(e.target.value); setCodeError(''); }}
-              className="glass-input"
-              style={{
-                border: codeError ? '1px solid #FF5252' : undefined,
-                borderRadius: '0.625rem',
-                fontFamily: "'IBM Plex Mono', monospace",
-                fontSize: '13px',
-                letterSpacing: '0.03em',
-                height: '44px',
-              }}
-              autoComplete='off'
-              autoCapitalize='none'
-              autoFocus
-            />
-
-            {codeError && (
-              <div className='flex items-center gap-1.5 text-xs' style={{ color: '#FF5252' }}>
-                <ShieldAlert size={12} />
-                {codeError}
-              </div>
-            )}
-
-            <Button
-              type='submit'
-              disabled={submittingCode}
-              className='w-full font-bold py-3 text-sm rounded-xl transition-opacity'
-              style={{
-                background: '#b794f6',
-                color: '#000',
-                border: 'none',
-                opacity: submittingCode ? 0.7 : 1,
-                height: '44px',
-              }}
-            >
-              {submittingCode ? (
-                <span className='flex items-center justify-center gap-2'>
-                  <Loader2 size={14} className='animate-spin' />
-                  Verifying…
-                </span>
-              ) : (
-                'Access Phoenix'
-              )}
-            </Button>
-          </form>
-        )}
-      </div>
-    );
-  }
 
   function renderSignIn() {
     return (
@@ -482,7 +380,7 @@ export function ActiveAccountFlow({ open, onOpenChange }: ActiveAccountFlowProps
     const phaseLabel =
       registerPhase === 'confirming'
         ? 'Confirming registration…'
-        : 'Registering on Phoenix…';
+        : 'Setting up your account…';
 
     const phaseSubtext =
       registerPhase === 'confirming'
@@ -496,7 +394,7 @@ export function ActiveAccountFlow({ open, onOpenChange }: ActiveAccountFlowProps
             Set up account
           </h2>
           <p className='text-sm' style={{ color: '#666' }}>
-            Registering your on-chain trader account.
+            Setting up your trading account.
           </p>
         </div>
 
@@ -511,9 +409,11 @@ export function ActiveAccountFlow({ open, onOpenChange }: ActiveAccountFlowProps
               </div>
               <div className='text-center'>
                 <p className='text-sm font-semibold mb-1' style={{ color: '#FF5252' }}>
-                  Registration failed
+                  Account setup failed
                 </p>
-                <p className='text-xs' style={{ color: '#666' }}>{registerError}</p>
+                <p className='text-xs' style={{ color: '#888' }}>
+                  Your wallet needs a small amount of SOL to cover account setup fees. Add SOL to your wallet and try again.
+                </p>
               </div>
               <Button
                 onClick={() => {
@@ -526,26 +426,6 @@ export function ActiveAccountFlow({ open, onOpenChange }: ActiveAccountFlowProps
               >
                 Retry
               </Button>
-              <div
-                className='w-full rounded-xl p-3 text-center space-y-2'
-                style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
-              >
-                <p className='text-xs' style={{ color: '#888' }}>
-                  Don't have a Phoenix account yet?
-                </p>
-                <a
-                  href='https://phoenix.trade'
-                  target='_blank'
-                  rel='noopener noreferrer'
-                  className='block w-full text-xs font-bold py-2 px-3 rounded-lg transition-all hover:brightness-110'
-                  style={{ background: 'rgba(183,148,246,0.12)', color: '#b794f6', border: '1px solid rgba(183,148,246,0.25)' }}
-                >
-                  Create account on phoenix.trade →
-                </a>
-                <p className='text-[10px]' style={{ color: '#555' }}>
-                  After activating your account there, come back here to log in and start trading.
-                </p>
-              </div>
             </>
           ) : (
             <>
@@ -587,7 +467,7 @@ export function ActiveAccountFlow({ open, onOpenChange }: ActiveAccountFlowProps
             Finish sign-in
           </h2>
           <p className='text-sm' style={{ color: '#666' }}>
-            Your Phoenix account is ready.
+            Your trading account is ready.
           </p>
         </div>
 
@@ -634,14 +514,13 @@ export function ActiveAccountFlow({ open, onOpenChange }: ActiveAccountFlowProps
         }}
       >
         <DialogHeader className='sr-only'>
-          <DialogTitle>Activate Phoenix Account</DialogTitle>
-          <DialogDescription>Complete the 4-step Phoenix account activation flow.</DialogDescription>
+          <DialogTitle>Activate Trading Account</DialogTitle>
+          <DialogDescription>Complete the trading account setup flow.</DialogDescription>
         </DialogHeader>
 
         <ProgressBar currentStep={step} />
 
         <div>
-          {step === 'verifyAccess' && renderVerifyAccess()}
           {step === 'signIn' && renderSignIn()}
           {step === 'setupAccount' && renderSetupAccount()}
           {step === 'finishSignIn' && renderFinishSignIn()}

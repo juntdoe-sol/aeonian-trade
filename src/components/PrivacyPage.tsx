@@ -19,15 +19,16 @@ export function PrivacyPage() {
         </Link>
         <h1 className='font-bold text-xl'>Privacy Policy</h1>
         <p className='text-xs mt-1' style={{ color: '#8A8A8A' }}>
-          Last updated: May 2025
+          Last updated: June 2026
         </p>
       </div>
 
       <div className='px-4 pt-5 pb-8 space-y-6 text-sm leading-relaxed' style={{ color: '#CCCCCC' }}>
         <Section title='Overview'>
           <p style={{ color: '#8A8A8A' }}>
-            AEONIAN is a non-custodial trading interface built on top of Phoenix Exchange and the
-            Solana blockchain. We are committed to protecting your privacy. This policy explains
+            AEONIAN is a non-custodial perpetual futures trading platform built on the Solana
+            blockchain, with social rewards, an Arena for trading competitions, and a monthly
+            on-chain prize pot. We are committed to protecting your privacy. This policy explains
             what information we collect, how we use it, and how we protect it.
           </p>
         </Section>
@@ -41,6 +42,10 @@ export function PrivacyPage() {
           </p>
           <ul className='mt-3 space-y-2'>
             <Item>Public wallet addresses used to interact with the application</Item>
+            <Item>
+              Connected social account details (such as your public X handle and avatar) when you
+              choose to link an account
+            </Item>
             <Item>Aggregated, anonymized usage analytics to improve the experience</Item>
             <Item>Error and performance logs for debugging purposes</Item>
           </ul>
@@ -60,9 +65,10 @@ export function PrivacyPage() {
 
         <Section title='Third-Party Services'>
           <p style={{ color: '#8A8A8A' }}>
-            AEONIAN integrates with third-party services including Phoenix Exchange, Solana RPC
-            providers, and Phantom Wallet. These services have their own privacy policies. We
-            recommend reviewing their policies before use.
+            AEONIAN relies on third-party infrastructure to operate, including Solana RPC providers,
+            wallet and login providers, and the on-chain trading venues your orders are routed to
+            for execution. Each of these services has its own privacy policy, and we recommend
+            reviewing them before use.
           </p>
         </Section>
 
@@ -101,7 +107,7 @@ export function PrivacyPage() {
         <Section title='Contact'>
           <p style={{ color: '#8A8A8A' }}>
             For privacy-related questions or requests, please contact us through the AEONIAN
-            official support channels or via Phoenix Exchange.
+            official support channels.
           </p>
         </Section>
       </div>

@@ -19,7 +19,7 @@ export function LicensePage() {
         </Link>
         <h1 className='font-bold text-xl'>License</h1>
         <p className='text-xs mt-1' style={{ color: '#8A8A8A' }}>
-          Last updated: May 2025
+          Last updated: June 2026
         </p>
       </div>
 
@@ -60,9 +60,9 @@ export function LicensePage() {
         <Section title='Third-Party Licenses'>
           <p style={{ color: '#8A8A8A' }}>
             This application uses open-source libraries and components, each governed by their
-            respective licenses. Notable dependencies include React (MIT), Solana web3.js (Apache
-            2.0), and Phoenix Exchange SDK. Full third-party license notices are available upon
-            request.
+            respective licenses. Notable dependencies include React (MIT) and Solana web3.js
+            (Apache 2.0), alongside underlying on-chain trading infrastructure. Full third-party
+            license notices are available upon request.
           </p>
         </Section>
 
@@ -70,8 +70,8 @@ export function LicensePage() {
 
         <Section title='Contact'>
           <p style={{ color: '#8A8A8A' }}>
-            For licensing inquiries, please contact us via the Phoenix Exchange official channels or
-            through the application&apos;s support resources.
+            For licensing inquiries, please contact us through the AEONIAN official support
+            channels.
           </p>
         </Section>
       </div>

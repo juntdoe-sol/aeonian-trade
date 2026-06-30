@@ -28,7 +28,8 @@ export const TOKEN_LOGO_URLS: Record<string, string> = {
 
   // ── DeFi / AI / Infra ────────────────────────────────────────────────────
   AAVE: `${CG}/12645/standard/aave-token-round.png?1720472354`,
-  TAO:  `${CG}/28452/standard/ARUsPeNQ_400x400.jpeg?1696527447`,
+  TAO:  `${CG_CDN}/28452/large/ARUsPeNQ_400x400.jpeg?1696527447`,   // Bittensor (CG base was dead → CDN)
+  WLD:  `${CG_CDN}/31069/large/worldcoin.jpeg?1696529903`,           // Worldcoin
   HYPE: `${CG}/50882/standard/hyperliquid.jpg?1729431300`,
   MON:  `${CG}/38927/standard/mon.png?1766029057`,
   LIT:  `${CG}/71121/standard/lighter.png?1765888098`,   // Lighter (LIT), not Litentry
@@ -40,7 +41,7 @@ export const TOKEN_LOGO_URLS: Record<string, string> = {
   CHIP: `https://assets.coingecko.com/coins/images/102171777/standard/CHIP_Token_Logo_Large.png?1776777444`, // USD.AI
 
   // ── Solana ecosystem ────────────────────────────────────────────────────
-  SKR:  `${CG}/70974/standard/seeker-logo.jpg?1764922774`,  // Solana Mobile Seeker
+  SKR:  `https://gateway.irys.xyz/uP1dFvCofZQT26m3SKOCttXrir3ORBR1B8wPhP6tv7M?ext=png`,  // Seeker (SKR) — on-chain metadata logo (assets.coingecko path was dead)
   JTO:  `${CG}/33228/standard/jto.png?1701137022`,           // Jito governance token
 
   // ── Meme / misc ─────────────────────────────────────────────────────────
@@ -86,6 +87,20 @@ export const TOKEN_LOGO_URLS: Record<string, string> = {
   NVDA: `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='50' fill='%2376B900'/%3E%3Ctext x='50' y='59' text-anchor='middle' font-size='24' font-weight='800' font-family='Arial%2Csans-serif' fill='%23fff'%3ENVDA%3C/text%3E%3C/svg%3E`,
   // SpaceX: white "SPCX" wordmark on black circle
   SPCX: `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='50' fill='%23000'/%3E%3Ctext x='50' y='59' text-anchor='middle' font-size='24' font-weight='800' font-family='Arial%2Csans-serif' fill='%23fff'%3ESPCX%3C/text%3E%3C/svg%3E`,
+  // Google: official 4-color "G" mark on white circle
+  GOOGL: `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='50' fill='%23fff'/%3E%3Cg transform='translate(20 20) scale(1.25)'%3E%3Cpath fill='%23EA4335' d='M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z'/%3E%3Cpath fill='%234285F4' d='M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z'/%3E%3Cpath fill='%23FBBC05' d='M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z'/%3E%3Cpath fill='%2334A853' d='M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z'/%3E%3C/g%3E%3C/svg%3E`,
+  // Tesla: white "T" wordmark on Tesla red circle
+  TSLA: `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='50' fill='%23E82127'/%3E%3Cpath fill='%23fff' d='M50 28 c-8 0-16 1-22 3 1 3 3 5 6 6 4-1 8-2 16-2s12 1 16 2c3-1 5-3 6-6-6-2-14-3-22-3z M47 72 V37 h6 v35 z'/%3E%3C/svg%3E`,
+  // Micron: real brand logo via Google's favicon service (stable, Google-hosted)
+  MU: `https://www.google.com/s2/favicons?domain=micron.com&sz=128`,
+  // Equity brand logos via Google's favicon service (stable, Google-hosted)
+  META: `https://www.google.com/s2/favicons?domain=meta.com&sz=128`,        // Meta Platforms
+  INTC: `https://www.google.com/s2/favicons?domain=intel.com&sz=128`,       // Intel
+  CRWV: `https://www.google.com/s2/favicons?domain=coreweave.com&sz=128`,   // CoreWeave
+  SNDK: `https://www.google.com/s2/favicons?domain=sandisk.com&sz=128`,     // SanDisk
+  MSFT: `https://www.google.com/s2/favicons?domain=microsoft.com&sz=128`,   // Microsoft
+  AMD:  `https://www.google.com/s2/favicons?domain=amd.com&sz=128`,         // AMD
+  AMZN: `https://www.google.com/s2/favicons?domain=amazon.com&sz=128`,      // Amazon
 };
 
 /**

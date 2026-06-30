@@ -547,7 +547,7 @@ export default function RoyalRumbleDetailPage() {
 
           <div className='grid grid-cols-3 gap-3 text-center'>
             <div>
-              <div className='text-xs mb-0.5' style={{ color: '#8A8A8A' }}>Prize Pot</div>
+              <div className='text-xs mb-0.5' style={{ color: '#8A8A8A' }}>Victory Treasury</div>
               <div className='text-lg font-black tabular-nums' style={{ color: '#FFD700' }}>
                 {formatUsdcMicro(potMicro)}
               </div>

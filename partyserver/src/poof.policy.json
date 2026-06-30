@@ -1150,7 +1150,7 @@
     }
   },
   "monthlyRewardWithdrawal/$withdrawalId": {
-    "description": "ONCHAIN passthrough. Admin-only WITHDRAW that pulls a token back OUT of the CURRENT, not-yet-finalized month's prize pot PDA (per-token, partial or full) — to fix a wrong-amount or wrong-token deposit. Reverse of monthlyRewardDeposit. The onchain hook transfers `amount` base units of `mint` FROM the pot PDA (potAccountId) back to the admin caller; the program signs for the PDA exactly like the allotment payout. Does NOT call createAccount — the PDA already exists from prior deposits. NOT-FINALIZED GUARD (enforced on-chain): the create rule reads the rank-1 allotment doc for this month and requires it to NOT exist yet (the backend Heartbeat creates monthlyRewardAllotment/{potAccountId}_1 at finalization). The rank-1 allotment id is supplied by the frontend as rank1AllotmentId so the guard uses the proven get(/coll/@newData.field) path-interpolation form (avoids the +-concat-as-arithmetic path bug). monthKey UNDERSCORE format e.g. '2026_06'. potAccountId deterministic e.g. 'monthlyPot_2026_06' (alphanumeric + underscore only). rank1AllotmentId MUST equal '{potAccountId}_1' e.g. 'monthlyPot_2026_06_1'. Frontend builds $withdrawalId as '{potAccountId}_{unixSecs}' (underscores only). amount in the token's base units (lamports for SOL, micro-units for SPL).",
+    "description": "ONCHAIN passthrough. Admin-only WITHDRAW that pulls a token back OUT of the CURRENT, not-yet-finalized month's prize pot PDA (per-token, partial or full) — to fix a wrong-amount or wrong-token deposit. Reverse of monthlyRewardDeposit. The onchain hook transfers `amount` base units of `mint` FROM the pot PDA (potAccountId) back to the admin caller; the program signs for the PDA exactly like the allotment payout. Does NOT call createAccount — the PDA already exists from prior deposits. NOT-FINALIZED GUARD (enforced on-chain): the create rule reads the rank-1 allotment doc for this month and requires it to NOT exist yet (the backend Heartbeat creates monthlyRewardAllotment/{potAccountId}_1 at finalization). The rank-1 allotment id is supplied by the frontend as rank1AllotmentId so the guard uses the proven get(/coll/@newData.field) path-interpolation form (avoids the +-concat-as-arithmetic path bug). monthKey UNDERSCORE format e.g. '2026_06'. potAccountId deterministic e.g. 'monthlyPot_2026_06' (alphanumeric + underscore only). rank1AllotmentId is the rank-1 allotment id for the month, built by the frontend as '{potAccountId}_1' e.g. 'monthlyPot_2026_06_1'. Frontend builds $withdrawalId as '{potAccountId}_{unixSecs}' (underscores only). amount in the token's base units (lamports for SOL, micro-units for SPL).",
     "fields": {
       "monthKey": "String!",
       "potAccountId": "String!",
@@ -1163,7 +1163,7 @@
     "isPassthrough": true,
     "rules": {
       "read": "true",
-      "create": "@user.address == @constants.ADMIN_ADDRESS && @newData.amount > 0 && @newData.rank1AllotmentId == @newData.potAccountId + '_1' && get(/monthlyRewardAllotment/@newData.rank1AllotmentId) == null",
+      "create": "@user.address == @constants.ADMIN_ADDRESS && @newData.amount > 0 && get(/monthlyRewardAllotment/@newData.rank1AllotmentId) == null",
       "update": "false",
       "delete": "false"
     },
@@ -1174,7 +1174,7 @@
     },
     "operationDetails": {
       "read": "Public (onchain). Anyone can read withdrawal records (audit trail of admin pot corrections).",
-      "create": "Admin-only (@constants.ADMIN_ADDRESS). amount > 0. NOT-FINALIZED GUARD: rank1AllotmentId must equal potAccountId + '_1', and the onchain rule reads get(/monthlyRewardAllotment/{rank1AllotmentId}) and requires it to be null — i.e. the month has NOT been finalized yet (the Heartbeat pre-creates the rank-1 allotment at finalization). This blocks any withdrawal once winners are locked. Onchain hook (atomic): @TokenPlugin.transfer moves `amount` base units of `mint` FROM the pot PDA (@newData.potAccountId — the program signs for it, same mechanism as the allotment payout) back to the admin caller (@user.address). Does NOT createAccount; the PDA already exists from prior deposits. Withdrawing more than the PDA holds for that mint will fail the transfer and roll back the whole tx. Pass @constants.SOL as mint for native test-SOL.",
+      "create": "Admin-only (@constants.ADMIN_ADDRESS). amount > 0. NOT-FINALIZED GUARD: the onchain rule reads get(/monthlyRewardAllotment/{rank1AllotmentId}) (rank1AllotmentId supplied by the frontend as '{potAccountId}_1') and requires it to be null — i.e. the month has NOT been finalized yet (the Heartbeat pre-creates the rank-1 allotment at finalization). This blocks any withdrawal once winners are locked. Onchain hook (atomic): @TokenPlugin.transfer moves `amount` base units of `mint` FROM the pot PDA (@newData.potAccountId — the program signs for it, same mechanism as the allotment payout) back to the admin caller (@user.address). Does NOT createAccount; the PDA already exists from prior deposits. Withdrawing more than the PDA holds for that mint will fail the transfer and roll back the whole tx. Pass @constants.SOL as mint for native test-SOL.",
       "update": "Operation disallowed. Passthrough withdrawal records are immutable.",
       "delete": "Operation disallowed. Passthrough withdrawal records cannot be deleted."
     },
@@ -1187,6 +1187,140 @@
         "returnType": "UInt",
         "query": "@TokenPlugin.getBalance(@AccountPlugin.getAccountAddress(@newData.potAccountId), @newData.mint)"
       }
+    }
+  },
+  "monthlyRewardTarget/$monthKey": {
+    "description": "Admin-set fundraising target for a calendar month's prize pot, used by the public prize pot card to render a deposited-vs-target progress bar. Document id is the month key string (e.g. '2026-06'); one doc per month. Target amount is stored in the token's on-chain base units to match monthlyRewardDeposit.amount.",
+    "fields": {
+      "monthKey": "String",
+      "targetMint": "Address",
+      "targetAmount": "UInt",
+      "updatedBy": "Address",
+      "updatedAt": "UInt",
+      "currentAmount": "UInt"
+    },
+    "onchain": false,
+    "rules": {
+      "read": "true",
+      "create": "@user.address == @constants.ADMIN_ADDRESS",
+      "update": "@user.address == @constants.ADMIN_ADDRESS",
+      "delete": "@user.address == @constants.ADMIN_ADDRESS"
+    },
+    "operationDetails": {
+      "read": "Anyone can read (public). The public-facing prize pot card reads currentAmount (the real displayed pot number) and targetAmount (aspirational target for the projected-split feature). All fields are returned.",
+      "create": "Admin only — @user.address must equal @constants.ADMIN_ADDRESS. Written directly from the admin frontend (not the backend). Document id must be the month key string (e.g. '2026-06'). targetAmount and currentAmount are in the token's on-chain base units. currentAmount is the real current prize-pot amount the admin sets directly on top-up.",
+      "update": "Admin only — @user.address must equal @constants.ADMIN_ADDRESS. Admin can revise the target, the real currentAmount on top-up, the target token mint, or metadata for an existing month.",
+      "delete": "Admin only — @user.address must equal @constants.ADMIN_ADDRESS. Admin can remove a month's target if set in error."
+    }
+  },
+  "defaultAvatars/$avatarId": {
+    "description": "Admin-managed pool of default avatar image URLs assigned to users who haven't connected their X profile. Image bytes live in the existing appFiles storage collection; this collection just holds the public URL pointing at them.",
+    "fields": {
+      "url": "String",
+      "createdAt": "UInt"
+    },
+    "onchain": false,
+    "rules": {
+      "read": "true",
+      "create": "@user.address == @constants.ADMIN_ADDRESS",
+      "update": "false",
+      "delete": "@user.address == @constants.ADMIN_ADDRESS"
+    },
+    "operationDetails": {
+      "read": "Anyone can read (public, no auth). Avatars surface on public leaderboards and profiles. Returns url and createdAt fields.",
+      "create": "Admin only — caller must equal @constants.ADMIN_ADDRESS. The admin wallet signs the write directly from the frontend (same pattern as logo upload and promotion moderation). No backend/PROJECT_VAULT writes involved. Frontend should pass url (public image URL) and createdAt (Unix seconds).",
+      "update": "Operation disallowed. Avatar entries are immutable once created — to change an avatar, delete and recreate.",
+      "delete": "Admin only — caller must equal @constants.ADMIN_ADDRESS. Removes an avatar from the default pool."
+    }
+  },
+  "articles/$articleId": {
+    "description": "Admin-posted trading news/articles displayed in a public feed on the Discovery landing page. Publicly readable by anyone (including unauthenticated visitors); only the project admin can create, update, or delete entries.",
+    "fields": {
+      "title": "String",
+      "link": "String",
+      "imageUrl": "String?",
+      "body": "String?",
+      "createdAt": "UInt"
+    },
+    "onchain": false,
+    "rules": {
+      "read": "true",
+      "create": "@user.address == @constants.ADMIN_ADDRESS",
+      "update": "@user.address == @constants.ADMIN_ADDRESS",
+      "delete": "@user.address == @constants.ADMIN_ADDRESS"
+    },
+    "operationDetails": {
+      "read": "Public. Anyone, including unauthenticated visitors, can read all article fields. Used for the Discovery landing page feed.",
+      "create": "Admin only. Caller's @user.address must equal @constants.ADMIN_ADDRESS (project owner wallet). Frontend must provide title, link, and createdAt (Unix seconds); imageUrl and body are optional. No hooks or token operations.",
+      "update": "Admin only. Caller's @user.address must equal @constants.ADMIN_ADDRESS. Any field may be edited.",
+      "delete": "Admin only. Caller's @user.address must equal @constants.ADMIN_ADDRESS. Removes the article from the feed."
+    }
+  },
+  "analyses/$analysisId": {
+    "description": "A user-posted trading analysis (technical analysis writeup) on the Discovery community feed. Publicly readable; only the author can create, edit, or delete their own post.",
+    "fields": {
+      "author": "Address!",
+      "title": "String",
+      "body": "String",
+      "imageUrl": "String?",
+      "createdAt": "UInt"
+    },
+    "onchain": false,
+    "rules": {
+      "read": "true",
+      "create": "@user.address != null && @newData.author == @user.address",
+      "update": "@data.author == @user.address",
+      "delete": "@data.author == @user.address"
+    },
+    "operationDetails": {
+      "read": "Anyone can read all analysis posts and all fields. Public community feed.",
+      "create": "Authenticated users only (@user.address != null). The author field must equal @user.address and is immutable (Address!). Frontend sets createdAt to current server time (Unix seconds).",
+      "update": "Only the original author (@data.author == @user.address) may edit their own post. The author field cannot be changed (readonly). Title, body, and imageUrl can be updated.",
+      "delete": "Only the original author (@data.author == @user.address) may delete their own post."
+    }
+  },
+  "analysisVotes/$voteId": {
+    "description": "One vote per user per analysis. Frontend keys voteId deterministically as ${analysisId}_${voterAddress} so each user has at most one vote document per analysis. value is 1 (upvote) or -1 (downvote). Queryable by analysisId so the frontend can sum scores.",
+    "fields": {
+      "analysisId": "String",
+      "voter": "Address!",
+      "value": "Int",
+      "createdAt": "UInt"
+    },
+    "onchain": false,
+    "rules": {
+      "read": "true",
+      "create": "@user.address != null && @newData.voter == @user.address && (@newData.value == 1 || @newData.value == -1)",
+      "update": "@data.voter == @user.address && (@newData.value == 1 || @newData.value == -1)",
+      "delete": "@data.voter == @user.address"
+    },
+    "operationDetails": {
+      "read": "Anyone can read all votes. Frontend queries votes by analysisId and sums value fields to compute each analysis's score.",
+      "create": "Authenticated users only. The voter field must equal @user.address and is immutable (Address!). value must be exactly 1 (upvote) or -1 (downvote). Frontend keys the document as ${analysisId}_${voterAddress} so a user can only hold one vote per analysis; re-voting overwrites their own document.",
+      "update": "Only the original voter (@data.voter == @user.address) may change their vote, allowing them to flip between upvote (1) and downvote (-1). value must remain 1 or -1.",
+      "delete": "Only the original voter (@data.voter == @user.address) may delete their vote (un-voting)."
+    }
+  },
+  "analysisComments/$commentId": {
+    "description": "A comment on an analysis post. Publicly readable; only the author can create, edit, or delete. Queryable by analysisId so the frontend can load all comments for a given analysis.",
+    "fields": {
+      "analysisId": "String",
+      "author": "Address!",
+      "body": "String",
+      "createdAt": "UInt"
+    },
+    "onchain": false,
+    "rules": {
+      "read": "true",
+      "create": "@user.address != null && @newData.author == @user.address",
+      "update": "@data.author == @user.address",
+      "delete": "@data.author == @user.address"
+    },
+    "operationDetails": {
+      "read": "Anyone can read all comments. Frontend queries comments by analysisId to load the comment thread for a given analysis.",
+      "create": "Authenticated users only. The author field must equal @user.address and is immutable (Address!). Frontend sets createdAt to current server time (Unix seconds).",
+      "update": "Only the original author (@data.author == @user.address) may edit their own comment. The author field cannot be changed (readonly).",
+      "delete": "Only the original author (@data.author == @user.address) may delete their own comment."
     }
   }
 }

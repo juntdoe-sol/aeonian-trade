@@ -1,10 +1,11 @@
-import { Repeat, Wallet, Swords, Download } from 'lucide-react';
+import { Repeat, Wallet, Swords, Download, Compass } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 const ARENA_ICON_URL =
   'https://tarobase-app-storage-public-v2-prod.s3.amazonaws.com/tarobase-app-storage-6a0c94282a336f1644283829/6a2bdb0d51aa5d57d5684be7';
 
 const TABS = [
+  { label: 'Discover', icon: Compass, path: '/discovery' },
   { label: 'Trade', icon: Repeat, path: '/trade/SOL-PERP' },
   { label: 'Arena', icon: Swords, iconUrl: ARENA_ICON_URL, path: '/battles', featured: true },
   { label: 'Account', icon: Wallet, path: '/portfolio' },
@@ -17,6 +18,7 @@ export function BottomTabNav() {
   function isActive(path: string): boolean {
     if (path.startsWith('/trade')) return location.pathname.startsWith('/trade');
     if (path === '/battles') return location.pathname.startsWith('/battles');
+    if (path === '/discovery') return location.pathname === '/discovery' || location.pathname === '/';
     return location.pathname === path;
   }
 
@@ -25,7 +27,7 @@ export function BottomTabNav() {
 
   return (
     <nav
-      className='fixed bottom-0 left-0 right-0 z-50 pointer-events-none'
+      className='md:hidden fixed bottom-0 left-0 right-0 z-50 pointer-events-none'
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
       <style>{`
@@ -51,12 +53,9 @@ export function BottomTabNav() {
         className='pointer-events-auto mx-4 mb-3 flex items-stretch justify-around gap-1 p-1.5 max-w-md md:mx-auto'
         style={{
           borderRadius: '9999px',
-          background: 'rgba(20, 16, 34, 0.72)',
-          backdropFilter: 'blur(22px) saturate(160%)',
-          WebkitBackdropFilter: 'blur(22px) saturate(160%)',
-          border: '1px solid rgba(255, 255, 255, 0.12)',
-          boxShadow:
-            '0 12px 40px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08)',
+          background: '#141418',
+          border: '1px solid rgba(255, 255, 255, 0.10)',
+          boxShadow: '0 8px 24px rgba(0, 0, 0, 0.55)',
         }}
       >
         {TABS.map((tab) => {

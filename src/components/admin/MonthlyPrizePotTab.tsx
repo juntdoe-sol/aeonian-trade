@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Trophy, Coins, Plus, Loader2, AlertTriangle, CheckCircle2, XCircle, Search } from 'lucide-react';
+import { Trophy, Coins, Plus, Loader2, AlertTriangle, CheckCircle2, XCircle, Search, RefreshCw } from 'lucide-react';
 import { useAuth, getIdToken } from '@pooflabs/web';
 import { createAuthenticatedApiClient, api } from '@/lib/api-client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,6 +17,9 @@ import {
   MonthlyRewardDepositResponse,
 } from '@/lib/collections/monthlyRewardDeposit';
 import {
+  runGetPotTokenBalanceQueryForMonthlyRewardWithdrawal,
+} from '@/lib/collections/monthlyRewardWithdrawal';
+import {
   KNOWN_TOKENS,
   currentMonthKeyUTC,
   potAccountIdForMonth,
@@ -28,6 +31,55 @@ import { SOL } from '@/lib/constants';
 import { errorToast, successToast } from '@/utils/toast-helpers';
 
 const MAX_TOKENS = 5;
+
+/**
+ * Fetches the REAL on-chain pot balance (deposits minus withdrawals) for each
+ * mint in the composition. Returns a map of mint → base-unit balance.
+ * This is the same query used by WithdrawFromPotSection so the admin always
+ * sees the authoritative net amount, never an inflated deposit-record sum.
+ */
+function useOnChainPotBalances(
+  potAccountId: string,
+  mints: string[],
+): { balances: Map<string, number>; loading: boolean; refresh: () => void } {
+  const [balances, setBalances] = useState<Map<string, number>>(new Map());
+  const [loading, setLoading] = useState(false);
+  const mintsKey = mints.join(',');
+
+  const fetchAll = useCallback(async () => {
+    if (!potAccountId || mints.length === 0) {
+      setBalances(new Map());
+      return;
+    }
+    setLoading(true);
+    try {
+      const results = await Promise.all(
+        mints.map(async (mint) => {
+          try {
+            const probeId = `${potAccountId}_${mint}_adminprobe`;
+            const live = await runGetPotTokenBalanceQueryForMonthlyRewardWithdrawal(probeId, {
+              potAccountId,
+              mint,
+            });
+            return [mint, Math.max(0, Math.floor(Number(live) || 0))] as [string, number];
+          } catch {
+            return [mint, 0] as [string, number];
+          }
+        }),
+      );
+      setBalances(new Map(results));
+    } finally {
+      setLoading(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [potAccountId, mintsKey]);
+
+  useEffect(() => {
+    void fetchAll();
+  }, [fetchAll]);
+
+  return { balances, loading, refresh: () => void fetchAll() };
+}
 
 // Solana address pattern for quick client-side validation before hitting the backend.
 const SOLANA_ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
@@ -90,6 +142,12 @@ export function MonthlyPrizePotTab() {
   // Resolve symbol + decimals for each mint (unknown mints fetched via lookup API).
   const allMints = useMemo(() => composition.map((c) => c.mint), [composition]);
   const tokenMeta = useTokenMetadata(allMints);
+
+  // AUTHORITATIVE on-chain balances (deposits MINUS withdrawals) for the summary card.
+  // This is the same query used by WithdrawFromPotSection to show "In pot: X".
+  // We use these instead of summing deposit records so the admin sees the real net amount.
+  const { balances: onChainBalances, loading: balancesLoading, refresh: refreshBalances } =
+    useOnChainPotBalances(potAccountId, allMints);
 
   /** Format a base-unit amount using resolved metadata. */
   const formatCompositionAmount = (baseUnits: number, mint: string): string => {
@@ -272,6 +330,8 @@ export function MonthlyPrizePotTab() {
         setCaAmount('');
         setCaInput('');
         setLookup({ status: 'idle' });
+        // Refresh the real on-chain balance display after deposit
+        refreshBalances();
         void announcePotOpen(user.address);
       } else {
         // setMonthlyRewardDeposit returned false (policy denial). Since the admin address
@@ -293,7 +353,7 @@ export function MonthlyPrizePotTab() {
 
   return (
     <div className="space-y-4">
-      {/* Current pot composition */}
+      {/* Current pot composition — shows REAL on-chain balance (deposits minus withdrawals) */}
       <Card className="glass-card">
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-semibold flex items-center gap-2">
@@ -302,6 +362,16 @@ export function MonthlyPrizePotTab() {
             <Badge variant="outline" className="ml-auto text-[10px] font-mono">
               {distinctMints}/{MAX_TOKENS} tokens
             </Badge>
+            <button
+              type="button"
+              onClick={refreshBalances}
+              disabled={balancesLoading}
+              className="opacity-60 hover:opacity-100 transition-opacity disabled:opacity-30"
+              aria-label="Refresh balances"
+              title="Refresh real-time balances"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${balancesLoading ? 'animate-spin' : ''}`} />
+            </button>
           </CardTitle>
         </CardHeader>
         <CardContent className="pt-0">
@@ -311,21 +381,33 @@ export function MonthlyPrizePotTab() {
             </p>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {composition.map(({ mint, total }) => (
-                <div
-                  key={mint}
-                  className="flex items-center gap-3 rounded-lg border border-border/50 bg-background/40 px-3 py-2"
-                >
-                  <TokenLogo symbol={resolvedSymbol(mint)} size={28} />
-                  <div className="min-w-0">
-                    <div className="text-sm font-semibold leading-tight">{formatCompositionAmount(total, mint)}</div>
-                    <div className="text-[10px] text-muted-foreground font-mono truncate">{resolvedSymbol(mint)}</div>
+              {composition.map(({ mint }) => {
+                // Use real on-chain balance (net of withdrawals) if loaded; show loading state otherwise.
+                const netBaseUnits = onChainBalances.get(mint);
+                const isLoadingBalance = netBaseUnits === undefined;
+                return (
+                  <div
+                    key={mint}
+                    className="flex items-center gap-3 rounded-lg border border-border/50 bg-background/40 px-3 py-2"
+                  >
+                    <TokenLogo symbol={resolvedSymbol(mint)} size={28} />
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold leading-tight">
+                        {isLoadingBalance ? (
+                          <span className="text-muted-foreground">Loading…</span>
+                        ) : (
+                          formatCompositionAmount(netBaseUnits, mint)
+                        )}
+                      </div>
+                      <div className="text-[10px] text-muted-foreground font-mono truncate">{resolvedSymbol(mint)}</div>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
           <p className="mt-3 text-[11px] text-muted-foreground">
+            Amounts shown are the real on-chain pot balance (deposits minus withdrawals).
             Rewards split per token: 1st place 50%, 2nd place 35%, 3rd place 15%. Winners are
             finalized automatically after the month ends.
           </p>
